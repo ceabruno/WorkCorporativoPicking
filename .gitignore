@@ -1,0 +1,56 @@
+# =========================
+# 🔒 SEGURIDAD (¡CRÍTICO!)
+# =========================
+# Ignora los archivos con variables de entorno y contraseñas
+.env
+.env.*
+*.env
+
+# =========================
+# 🐍 ENTORNO VIRTUAL PYTHON
+# =========================
+# Ignora las carpetas donde se instalan las librerías de Python
+Include/
+Lib/
+Scripts/
+pyvenv.cfg
+venv/
+env/
+
+# =========================
+# ⚙️ BACKEND (Python / FastAPI)
+# =========================
+# Ignora la caché de Python para mantener el repositorio limpio
+__pycache__/
+*.py[cod]
+*$py.class
+backend/__pycache__/
+
+# =========================
+# 🗄️ BASE DE DATOS Y DATOS LOCALES
+# =========================
+# Ignora la base de datos de SQLite y tu archivo Excel
+*.db
+*.sqlite3
+bodega.db
+backend/bodega.db
+*.xlsx
+*.csv
+
+# =========================
+# ⚛️ FRONTEND (Node / React)
+# =========================
+# Ignora las librerías descargadas y carpetas de construcción
+frontend/node_modules/
+node_modules/
+dist/
+build/
+.eslintcache
+
+# =========================
+# 💻 ARCHIVOS DEL SISTEMA Y EDITOR
+# =========================
+# Ignora configuraciones locales de tu editor de código o Windows/Mac
+.DS_Store
+.vscode/
+Thumbs.db

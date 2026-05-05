@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* Aquí agregamos los colores corporativos que usas en tu diseño */
+@theme {
+  --color-work-red: #dc2626;
+  --color-work-red-hover: #b91c1c;
+  --color-graphite: #334155;
+  --color-graphite-dark: #1e293b;
+}
+
+/* Clases útiles para animación que tenías en tus componentes */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+  .animate-pop-in {
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}

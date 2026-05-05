@@ -1,0 +1,268 @@
+import os
+import requests
+import pandas as pd
+from datetime import datetime
+from dotenv import load_dotenv
+
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from jose import JWTError, jwt
+
+# Importaciones de nuestros archivos locales
+from database import get_db, engine
+from models import Base, Usuario, RegistroPicking
+from auth import verify_password, create_access_token, get_password_hash, SECRET_KEY, ALGORITHM
+
+# 1. CARGAR VARIABLES DE SEGURIDAD DEL ARCHIVO .ENV
+load_dotenv()
+
+LAUDUS_API_URL = os.getenv("LAUDUS_API_URL")
+LAUDUS_USER = os.getenv("LAUDUS_USER")
+LAUDUS_PASSWORD = os.getenv("LAUDUS_PASSWORD")
+LAUDUS_COMPANY_VAT = os.getenv("LAUDUS_COMPANY_VAT")
+
+# 2. INICIALIZAR FASTAPI
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 3. CONFIGURACIÓN DE SEGURIDAD (WMS)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
+
+class UsuarioNuevo(BaseModel):
+    username: str
+    password: str
+    rol: str
+    nombre_completo: str
+
+def obtener_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Desencripta el token JWT para saber quién está usando la app"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Token inválido")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+        
+    usuario = db.query(Usuario).filter(Usuario.username == username).first()
+    if usuario is None:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    return usuario
+
+def solo_admin(usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Bloquea el acceso si el usuario no es administrador"""
+    if usuario_actual.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado: Se requiere rol de administrador")
+    return usuario_actual
+
+# ==========================================
+# RUTAS DE USUARIOS Y LOGIN
+# ==========================================
+
+@app.post("/api/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """Verifica credenciales y entrega el token de acceso"""
+    usuario = db.query(Usuario).filter(Usuario.username == form_data.username).first()
+    if not usuario or not verify_password(form_data.password, usuario.hashed_password):
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    
+    token = create_access_token(data={"sub": usuario.username, "rol": usuario.rol})
+    return {
+        "access_token": token, 
+        "token_type": "bearer", 
+        "nombre": usuario.nombre_completo, 
+        "rol": usuario.rol
+    }
+
+@app.post("/api/usuarios")
+def crear_usuario_web(nuevo_usuario: UsuarioNuevo, db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
+    """Crea un usuario nuevo (Solo admins pueden usar esto)"""
+    if db.query(Usuario).filter(Usuario.username == nuevo_usuario.username).first():
+        raise HTTPException(status_code=400, detail="El nombre de usuario ya está en uso")
+        
+    usuario_bd = Usuario(
+        username=nuevo_usuario.username,
+        hashed_password=get_password_hash(nuevo_usuario.password),
+        rol=nuevo_usuario.rol,
+        nombre_completo=nuevo_usuario.nombre_completo
+    )
+    db.add(usuario_bd)
+    db.commit()
+    return {"mensaje": f"Usuario '{nuevo_usuario.nombre_completo}' creado con éxito!"}
+
+# ==========================================
+# RUTAS DEL CRONÓMETRO DE PICKING Y KPIS
+# ==========================================
+
+@app.post("/api/iniciar_picking")
+def iniciar_picking(cotizacion_id: str, preparador: str, db: Session = Depends(get_db)):
+    """Guarda la hora exacta en la que se imprimió la hoja"""
+    nuevo_registro = RegistroPicking(
+        cotizacion_id=cotizacion_id,
+        hora_inicio=datetime.utcnow(),
+        nombre_preparador=preparador
+    )
+    db.add(nuevo_registro)
+    db.commit()
+    db.refresh(nuevo_registro)
+    return {"mensaje": "Cronómetro iniciado", "registro_id": nuevo_registro.id}
+
+@app.post("/api/finalizar_picking/{registro_id}")
+def finalizar_picking(registro_id: int, db: Session = Depends(get_db)):
+    """Detiene el reloj cuando el operario termina"""
+    registro = db.query(RegistroPicking).filter(RegistroPicking.id == registro_id).first()
+    if not registro:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    registro.hora_fin = datetime.utcnow()
+    db.commit()
+    return {"mensaje": "Picking finalizado con éxito"}
+
+@app.get("/api/kpis")
+def obtener_kpis(db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
+    """Calcula los tiempos de picking para el Dashboard"""
+    registros = db.query(RegistroPicking).filter(RegistroPicking.hora_fin.isnot(None)).all()
+    kpis_preparadores = {}
+    
+    for r in registros:
+        tiempo_segundos = (r.hora_fin - r.hora_inicio).total_seconds()
+        minutos = tiempo_segundos / 60.0
+        nombre = r.nombre_preparador
+        
+        if nombre not in kpis_preparadores:
+            kpis_preparadores[nombre] = {"total_pedidos": 0, "tiempo_total": 0}
+            
+        kpis_preparadores[nombre]["total_pedidos"] += 1
+        kpis_preparadores[nombre]["tiempo_total"] += minutos
+
+    resultados = []
+    for nombre, datos in kpis_preparadores.items():
+        promedio = datos["tiempo_total"] / datos["total_pedidos"]
+        resultados.append({
+            "nombre": nombre,
+            "total_pedidos": datos["total_pedidos"],
+            "tiempo_promedio_minutos": round(promedio, 2)
+        })
+        
+    resultados = sorted(resultados, key=lambda x: x["tiempo_promedio_minutos"])
+
+    return {
+        "total_pickings_historico": len(registros),
+        "estadisticas_preparadores": resultados
+    }
+
+# ==========================================
+# RUTA PRINCIPAL: LAUDUS + EXCEL
+# ==========================================
+
+def obtener_token_laudus():
+    """Función de ayuda para iniciar sesión en Laudus y obtener el Token de la sesión"""
+    url_login = f"{LAUDUS_API_URL}/security/login"
+    payload = {
+        "userName": LAUDUS_USER,
+        "password": LAUDUS_PASSWORD,
+        "companyVATId": LAUDUS_COMPANY_VAT
+    }
+    
+    res = requests.post(url_login, json=payload)
+    if not res.ok:
+        raise HTTPException(status_code=401, detail="Fallo al autenticar con Laudus ERP")
+    
+    return res.json().get("token")
+
+# ==========================================
+# RUTA PRINCIPAL: LAUDUS + EXCEL (VERSIÓN CORREGIDA)
+# ==========================================
+
+@app.get("/api/generar_picking/{cotizacion_id}")
+def generar_hoja_picking(cotizacion_id: str):
+    """Busca la cotización en Laudus y cruza los datos con la hoja CODIFICACION"""
+    try:
+        # 1. Autenticación y obtención del token de Laudus
+        token_laudus = obtener_token_laudus()
+        
+        # 2. Consultar la Cotización (Ruta corregida a /sales/quotes/)
+        url_cotizacion = f"{LAUDUS_API_URL}/sales/quotes/{cotizacion_id}"
+        headers = {
+            "Authorization": f"Bearer {token_laudus}", 
+            "Content-Type": "application/json"
+        }
+        
+        respuesta_laudus = requests.get(url_cotizacion, headers=headers)
+        
+        if not respuesta_laudus.ok:
+            raise HTTPException(status_code=400, detail="No se encontró la cotización en Laudus.")
+
+        datos_laudus = respuesta_laudus.json()
+        
+        # Obtenemos los items de forma segura como en tu código original
+        items_cotizacion = datos_laudus.get("items") or []
+
+        if not items_cotizacion:
+            raise HTTPException(
+                status_code=400, 
+                detail="Esta cotización existe, pero no tiene productos agregados."
+            )
+
+        # 3. Procesar los Productos
+        productos_solicitados = []
+        for item in items_cotizacion:
+            producto_info = item.get("product") or {}
+            sku_original = str(producto_info.get("sku", "")).strip()
+            
+            # Limpiamos ceros
+            sku_limpio = sku_original.lstrip("0") 
+            
+            productos_solicitados.append({
+                "SKU (CODIGO)": sku_limpio, 
+                "DESCRIPCION": producto_info.get("description", "Sin descripción"),
+                "CANTIDAD": item.get("quantity", 0),
+                "PRECIO": round(item.get("unitPrice", 0) * 1.19)
+            })
+
+        # 4. Cruce con el Archivo Excel (Hoja corregida)
+        df_ubicaciones = pd.read_excel("Layout bodega store.xlsx", sheet_name="CODIFICACION")
+        df_pedidos = pd.DataFrame(productos_solicitados)
+        
+        # Limpieza de SKUs en el Excel igual que en tu código original
+        df_ubicaciones["SKU (CODIGO)"] = df_ubicaciones["SKU (CODIGO)"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.lstrip("0")
+        
+        # Cruce de datos
+        ruta_final = pd.merge(df_pedidos, df_ubicaciones, on="SKU (CODIGO)", how="left")
+        ruta_final = ruta_final.fillna("SIN UBICACIÓN")
+        
+        # Ordenamiento de la ruta
+        if all(col in ruta_final.columns for col in ['PASILLO', 'HILERA', 'ESTAND']):
+            ruta_final['PASILLO'] = ruta_final['PASILLO'].astype(str)
+            ruta_final['HILERA'] = ruta_final['HILERA'].astype(str)
+            ruta_final['ESTAND'] = ruta_final['ESTAND'].astype(str)
+            ruta_ordenada = ruta_final.sort_values(by=['PASILLO', 'HILERA', 'ESTAND'])
+        else:
+            # Si por algún motivo las columnas no existen, no ordenamos para evitar errores
+            ruta_ordenada = ruta_final
+
+        # Convertimos a diccionario
+        hoja_ruta = ruta_ordenada.to_dict(orient="records")
+
+        # 5. Respuesta Final para React (Llaves corregidas)
+        # Usamos .get() de forma encadenada por si alguna cotización no tiene vendedor asignado
+        return {
+            "cotizacion_id": cotizacion_id,
+            "cliente": datos_laudus.get("customer", {}).get("name", "Cliente Desconocido"),
+            "vendedor": datos_laudus.get("salesman", {}).get("name", "Vendedor Desconocido"),
+            "fecha": datos_laudus.get("issuedDate", datetime.now().isoformat()),
+            "hoja_ruta": hoja_ruta
+        }
+
+    except Exception as e:
+        print(f"\n🚨 ERROR CRÍTICO DETECTADO: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
