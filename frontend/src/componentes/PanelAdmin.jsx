@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import API_URL from '../config';
+import HojaDePicking from './HojadePicking';
 
-export default function PanelAdmin({ token, rol }) {
-  const [pestanaActiva, setPestanaActiva] = useState('dashboard');
+export default function PanelAdmin({ token, rol, nombre }) {
   const esAdmin = rol === 'admin';
+  const [pestanaActiva, setPestanaActiva] = useState(esAdmin ? 'dashboard' : 'bodega');
+  
+  // Aseguramos que un rol sin permisos vea directamente la pestaña de bodega
+  useEffect(() => {
+    if (!esAdmin) setPestanaActiva('bodega');
+  }, [esAdmin]);
   
   // Estados para creación
   const [formData, setFormData] = useState({ username: '', password: '', nombre_completo: '', rol: 'preparador' });
@@ -22,6 +28,12 @@ export default function PanelAdmin({ token, rol }) {
   const [archivoUbicaciones, setArchivoUbicaciones] = useState(null);
   const [estadoUbicaciones, setEstadoUbicaciones] = useState(null);
   const [subiendoArchivo, setSubiendoArchivo] = useState(false);
+
+  // Estados para cotización / hoja de picking
+  const [cotizacion, setCotizacion] = useState('');
+  const [datosPicking, setDatosPicking] = useState(null);
+  const [cargandoCotizacion, setCargandoCotizacion] = useState(false);
+  const [errorCotizacion, setErrorCotizacion] = useState('');
 
   useEffect(() => { 
     if (pestanaActiva === 'dashboard') cargarKpis(); 
@@ -164,6 +176,27 @@ export default function PanelAdmin({ token, rol }) {
     }
   };
 
+  const buscarCotizacion = async (e) => {
+    e.preventDefault();
+    setCargandoCotizacion(true);
+    setErrorCotizacion('');
+
+    try {
+      const res = await fetch(`${API_URL}/api/generar_picking/${cotizacion}`);
+      const data = await res.json();
+      if (res.ok) {
+        data.nombre_preparador = nombre;
+        setDatosPicking(data);
+      } else {
+        setErrorCotizacion(data.detail || 'Error al buscar la cotización.');
+      }
+    } catch (err) {
+      setErrorCotizacion('No se pudo conectar con el servidor.');
+    } finally {
+      setCargandoCotizacion(false);
+    }
+  };
+
   // --- INTERFAZ VISUAL ---
   return (
     <div className="page-bg admin-container">
@@ -172,7 +205,7 @@ export default function PanelAdmin({ token, rol }) {
       <div className="mb-8 border-b border-slate-200">
         <h1 className="title-main">Centro de Administración</h1>
         <div className="flex gap-4 flex-wrap">
-          <button onClick={() => setPestanaActiva('dashboard')} className={pestanaActiva === 'dashboard' ? 'tab-active' : 'tab-inactive'}>📊 Dashboard KPIs</button>
+          {esAdmin && <button onClick={() => setPestanaActiva('dashboard')} className={pestanaActiva === 'dashboard' ? 'tab-active' : 'tab-inactive'}>📊 Dashboard KPIs</button>}
           {esAdmin && <button onClick={() => setPestanaActiva('usuarios')} className={pestanaActiva === 'usuarios' ? 'tab-active' : 'tab-inactive'}>👥 Cuentas de Personal</button>}
           <button onClick={() => setPestanaActiva('bodega')} className={pestanaActiva === 'bodega' ? 'tab-active' : 'tab-inactive'}>📦 Configuración Bodega</button>
         </div>
@@ -360,6 +393,29 @@ export default function PanelAdmin({ token, rol }) {
                 {subiendoArchivo ? '📤 Subiendo...' : '📤 Subir Archivo de Ubicaciones'}
               </button>
             </form>
+          </div>
+
+          <div className="card-main">
+            <h2 className="title-section">🔍 Consultar Cotización</h2>
+            {datosPicking ? (
+              <HojaDePicking datos={datosPicking} onVolver={() => setDatosPicking(null)} />
+            ) : (
+              <form onSubmit={buscarCotizacion} className="space-y-4">
+                {errorCotizacion && <div className="alert-error">🚨 {errorCotizacion}</div>}
+                <input
+                  type="text"
+                  required
+                  placeholder="N° Cotización (Ej: 11811)"
+                  value={cotizacion}
+                  disabled={cargandoCotizacion}
+                  onChange={(e) => setCotizacion(e.target.value)}
+                  className="form-input"
+                />
+                <button type="submit" disabled={cargandoCotizacion} className="btn-primary w-full">
+                  {cargandoCotizacion ? 'Consultando...' : '🔍 Buscar y Generar Ruta'}
+                </button>
+              </form>
+            )}
           </div>
 
           <button onClick={verificarEstadoArchivo} className="btn-text mx-auto">🔄 Verificar Estado</button>
