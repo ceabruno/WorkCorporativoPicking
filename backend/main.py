@@ -47,11 +47,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# Añade esto en backend/main.py para hacer una prueba rápida
-@app.get("/api/ping")
-def ping_prueba():
-    """Ruta simple para verificar si CORS y el servidor funcionan."""
-    return {"mensaje": "¡Conexión exitosa, CORS está funcionando!"}
 # 3. CONFIGURACIÓN DE SEGURIDAD (WMS)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
 
@@ -107,7 +102,30 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         "nombre": usuario.nombre_completo, 
         "rol": usuario.rol
     }
+@app.post("/api/usuarios")
+def crear_usuario(nuevo_usuario: UsuarioNuevo, db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
+    """
+    Recibe los datos del frontend y crea un nuevo usuario en la base de datos.
+    Solo accesible para el administrador.
+    """
+    # 1. Verificamos si el nombre de usuario ya está registrado
+    usuario_existente = db.query(Usuario).filter(Usuario.username == nuevo_usuario.username).first()
+    if usuario_existente:
+        raise HTTPException(status_code=400, detail="El nombre de usuario ya está en uso.")
 
+    # 2. Preparamos los datos y encriptamos la contraseña
+    usuario_db = Usuario(
+        username=nuevo_usuario.username,
+        hashed_password=get_password_hash(nuevo_usuario.password),
+        rol=nuevo_usuario.rol,
+        nombre_completo=nuevo_usuario.nombre_completo
+    )
+    
+    # 3. Guardamos en la base de datos
+    db.add(usuario_db)
+    db.commit()
+    
+    return {"mensaje": f"La cuenta de {nuevo_usuario.nombre_completo} ha sido creada con éxito."}
 @app.get("/api/usuarios")
 def listar_usuarios(db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
     """Obtiene la lista de todos los usuarios registrados (Solo para administradores)"""
