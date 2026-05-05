@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import API_URL from '../config';
 
 export default function PanelAdmin({ token }) {
   const [pestanaActiva, setPestanaActiva] = useState('dashboard');
@@ -31,7 +32,7 @@ export default function PanelAdmin({ token }) {
   const cargarKpis = async () => {
     setCargandoKpis(true);
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/kpis', { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/kpis`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) setDatosKpi(await res.json());
     } catch (err) { console.error(err); } finally { setCargandoKpis(false); }
   };
@@ -39,7 +40,7 @@ export default function PanelAdmin({ token }) {
   const cargarUsuarios = async () => {
     setCargandoUsuarios(true);
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/usuarios', { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/usuarios`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) setListaUsuarios(await res.json());
     } catch (err) { console.error("Error al cargar lista de usuarios", err); } 
     finally { setCargandoUsuarios(false); }
@@ -49,7 +50,7 @@ export default function PanelAdmin({ token }) {
     e.preventDefault();
     setCreandoUsuario(true); setMensaje({ texto: '', tipo: '' });
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/usuarios', {
+      const res = await fetch(`${API_URL}/api/usuarios`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(formData)
@@ -70,7 +71,7 @@ export default function PanelAdmin({ token }) {
     }
     
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/usuarios/${id}`, {
+      const res = await fetch(`${API_URL}/api/usuarios/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -89,7 +90,7 @@ export default function PanelAdmin({ token }) {
 
   const verificarEstadoArchivo = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/config/ubicaciones-status');
+      const res = await fetch(`${API_URL}/api/config/ubicaciones-status`);
       const data = await res.json();
       setEstadoUbicaciones(data);
     } catch (error) {
@@ -111,7 +112,7 @@ export default function PanelAdmin({ token }) {
     formData.append("file", archivoUbicaciones);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/config/subir-ubicaciones', {
+      const res = await fetch(`${API_URL}/api/config/subir-ubicaciones`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

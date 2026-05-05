@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import API_URL from '../config';
 
 export default function HojaDePicking({ datos, onVolver }) {
   const [pickingIniciado, setPickingIniciado] = useState(false);
@@ -10,7 +11,7 @@ export default function HojaDePicking({ datos, onVolver }) {
 
   const iniciarEImprimir = async () => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/iniciar_picking?cotizacion_id=${datos.cotizacion_id}&preparador=${datos.nombre_preparador}`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/api/iniciar_picking?cotizacion_id=${datos.cotizacion_id}&preparador=${datos.nombre_preparador}`, { method: 'POST' });
       const data = await res.json();
       setRegistroId(data.registro_id);
       setPickingIniciado(true);
@@ -21,7 +22,7 @@ export default function HojaDePicking({ datos, onVolver }) {
   const finalizarPicking = async () => {
     const itemsCompletados = datos.hoja_ruta.map(item => ({ sku: String(item["SKU (CODIGO)"]), descripcion: String(item.DESCRIPCION), cantidad: Number(item.CANTIDAD) }));
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/finalizar_picking/${registroId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: itemsCompletados }) });
+      const res = await fetch(`${API_URL}/api/finalizar_picking/${registroId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: itemsCompletados }) });
       if (res.ok) { setPickingFinalizado(true); alert("¡Picking finalizado con éxito!"); }
     } catch (error) { alert("Hubo un error al guardar."); }
   };

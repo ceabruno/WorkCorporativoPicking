@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import API_URL from '../config';
 import HojaDePicking from './HojadePicking'; 
 
 export default function PanelPicker({ nombreUsuario }) {
@@ -11,7 +12,7 @@ export default function PanelPicker({ nombreUsuario }) {
     e.preventDefault();
     setCargando(true); setError(''); 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/generar_picking/${cotizacion}`);
+      const res = await fetch(`${API_URL}/api/generar_picking/${cotizacion}`);
       const datos = await res.json();
       if (res.ok) {
         datos.nombre_preparador = nombreUsuario;
