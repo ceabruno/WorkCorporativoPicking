@@ -15,7 +15,7 @@ from jose import JWTError, jwt
 # Importaciones de nuestros archivos locales
 from database import get_db, engine
 from models import Base, Usuario, RegistroPicking, ConfiguracionBodega
-from auth import verify_password, create_access_token, get_password_hash, SECRET_KEY, ALGORITHM
+from auth import verify_password, create_access_token, get_password_hash, get_secret_key, ALGORITHM
 
 # 1. CARGAR VARIABLES DE SEGURIDAD DEL ARCHIVO .ENV
 load_dotenv()
@@ -66,7 +66,7 @@ class FinalizarPickingSchema(BaseModel):
 def obtener_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Desencripta el token JWT para saber quién está usando la app"""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=401, detail="Token inválido")
