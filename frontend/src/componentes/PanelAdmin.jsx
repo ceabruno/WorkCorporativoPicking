@@ -28,6 +28,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const [archivoUbicaciones, setArchivoUbicaciones] = useState(null);
   const [estadoUbicaciones, setEstadoUbicaciones] = useState(null);
   const [subiendoArchivo, setSubiendoArchivo] = useState(false);
+  const [subPestanaBodega, setSubPestanaBodega] = useState('ubicaciones');
 
   // Estados para cotización / hoja de picking
   const [cotizacion, setCotizacion] = useState('');
@@ -330,95 +331,116 @@ export default function PanelAdmin({ token, rol, nombre }) {
       {pestanaActiva === 'bodega' && (
         <div className="space-y-6 animate-fade-up">
           <div className="card-main">
-            <h2 className="title-section">📦 Gestión de Ubicaciones de Bodega</h2>
+            <h2 className="title-section">📦 Gestión de Bodega</h2>
             
-            <p className="text-sm text-slate-600 mb-6">
-              Carga el archivo Excel con las ubicaciones de los productos. Este archivo será utilizado para mostrar la ruta de picking a los preparadores.
-            </p>
-
-            {/* Estado actual del archivo */}
-            {estadoUbicaciones && (
-              <div className={`p-4 rounded-lg mb-6 ${estadoUbicaciones.cargado ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-slate-200'}`}>
-                {estadoUbicaciones.cargado ? (
-                  <>
-                    <p className="font-bold text-emerald-700">✅ Archivo Cargado</p>
-                    <p className="text-sm text-slate-700 mt-2">
-                      <strong>Nombre:</strong> {estadoUbicaciones.nombre_archivo}
-                    </p>
-                    <p className="text-sm text-slate-700">
-                      <strong>Cargado por:</strong> {estadoUbicaciones.cargado_por}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      <strong>Fecha:</strong> {new Date(estadoUbicaciones.fecha_carga).toLocaleString('es-ES')}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-slate-600">⚠️ {estadoUbicaciones.mensaje}</p>
-                )}
-              </div>
-            )}
-
-            {/* Formulario para subir archivo */}
-            <form onSubmit={handleSubirArchivo} className="space-y-4">
-              <div>
-                <label className="form-label">Seleccionar archivo Excel (.xlsx o .xls)</label>
-                <div className="flex gap-2">
-                  <input 
-                    id="input-archivo-ubicaciones"
-                    type="file" 
-                    accept=".xlsx,.xls"
-                    className="form-input flex-1"
-                    onChange={(e) => setArchivoUbicaciones(e.target.files[0])}
-                  />
-                </div>
-                {archivoUbicaciones && (
-                  <p className="text-sm text-slate-500 mt-2">📄 Archivo seleccionado: {archivoUbicaciones.name}</p>
-                )}
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-                <p className="text-xs font-bold text-blue-900">ℹ️ Requisitos del archivo:</p>
-                <ul className="text-xs text-blue-800 mt-2 space-y-1">
-                  <li>✓ Debe tener una hoja llamada "<strong>CODIFICACION</strong>"</li>
-                  <li>✓ Debe contener una columna "<strong>SKU (CODIGO)</strong>"</li>
-                  <li>✓ Debe contener columnas de ubicación: <strong>PASILLO, HILERA, ESTAND</strong></li>
-                </ul>
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={subiendoArchivo || !archivoUbicaciones}
-                className="btn-dark w-full"
+            <div className="flex flex-wrap gap-2 mt-4 mb-6">
+              <button
+                type="button"
+                className={subPestanaBodega === 'ubicaciones' ? 'tab-active' : 'tab-inactive'}
+                onClick={() => setSubPestanaBodega('ubicaciones')}
               >
-                {subiendoArchivo ? '📤 Subiendo...' : '📤 Subir Archivo de Ubicaciones'}
+                📁 Subir Excel
               </button>
-            </form>
-          </div>
+              <button
+                type="button"
+                className={subPestanaBodega === 'cotizacion' ? 'tab-active' : 'tab-inactive'}
+                onClick={() => setSubPestanaBodega('cotizacion')}
+              >
+                🔎 Consultar Cotización
+              </button>
+            </div>
 
-          <div className="card-main">
-            <h2 className="title-section">🔍 Consultar Cotización</h2>
-            {datosPicking ? (
-              <HojaDePicking datos={datosPicking} onVolver={() => setDatosPicking(null)} />
-            ) : (
-              <form onSubmit={buscarCotizacion} className="space-y-4">
-                {errorCotizacion && <div className="alert-error">🚨 {errorCotizacion}</div>}
-                <input
-                  type="text"
-                  required
-                  placeholder="N° Cotización (Ej: 11811)"
-                  value={cotizacion}
-                  disabled={cargandoCotizacion}
-                  onChange={(e) => setCotizacion(e.target.value)}
-                  className="form-input"
-                />
-                <button type="submit" disabled={cargandoCotizacion} className="btn-primary w-full">
-                  {cargandoCotizacion ? 'Consultando...' : '🔍 Buscar y Generar Ruta'}
-                </button>
-              </form>
+            {subPestanaBodega === 'ubicaciones' && (
+              <>
+                <p className="text-sm text-slate-600 mb-6">
+                  Carga el archivo Excel con las ubicaciones de los productos. Este archivo será utilizado para mostrar la ruta de picking a los preparadores.
+                </p>
+
+                {/* Estado actual del archivo */}
+                {estadoUbicaciones && (
+                  <div className={`p-4 rounded-lg mb-6 ${estadoUbicaciones.cargado ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-slate-200'}`}>
+                    {estadoUbicaciones.cargado ? (
+                      <>
+                        <p className="font-bold text-emerald-700">✅ Archivo Cargado</p>
+                        <p className="text-sm text-slate-700 mt-2">
+                          <strong>Nombre:</strong> {estadoUbicaciones.nombre_archivo}
+                        </p>
+                        <p className="text-sm text-slate-700">
+                          <strong>Cargado por:</strong> {estadoUbicaciones.cargado_por}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          <strong>Fecha:</strong> {new Date(estadoUbicaciones.fecha_carga).toLocaleString('es-ES')}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-slate-600">⚠️ {estadoUbicaciones.mensaje}</p>
+                    )}
+                  </div>
+                )}
+
+                <form onSubmit={handleSubirArchivo} className="space-y-4">
+                  <div>
+                    <label className="form-label">Seleccionar archivo Excel (.xlsx o .xls)</label>
+                    <div className="flex gap-2">
+                      <input 
+                        id="input-archivo-ubicaciones"
+                        type="file" 
+                        accept=".xlsx,.xls"
+                        className="form-input flex-1"
+                        onChange={(e) => setArchivoUbicaciones(e.target.files[0])}
+                      />
+                    </div>
+                    {archivoUbicaciones && (
+                      <p className="text-sm text-slate-500 mt-2">📄 Archivo seleccionado: {archivoUbicaciones.name}</p>
+                    )}
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                    <p className="text-xs font-bold text-blue-900">ℹ️ Requisitos del archivo:</p>
+                    <ul className="text-xs text-blue-800 mt-2 space-y-1">
+                      <li>✓ Debe tener una hoja llamada "<strong>CODIFICACION</strong>"</li>
+                      <li>✓ Debe contener una columna "<strong>SKU (CODIGO)</strong>"</li>
+                      <li>✓ Debe contener columnas de ubicación: <strong>PASILLO, HILERA, ESTAND</strong></li>
+                    </ul>
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={subiendoArchivo || !archivoUbicaciones}
+                    className="btn-dark w-full"
+                  >
+                    {subiendoArchivo ? '📤 Subiendo...' : '📤 Subir Archivo de Ubicaciones'}
+                  </button>
+                </form>
+
+                <button onClick={verificarEstadoArchivo} className="btn-text mx-auto mt-4">🔄 Verificar Estado</button>
+              </>
+            )}
+
+            {subPestanaBodega === 'cotizacion' && (
+              <div className="space-y-4">
+                {datosPicking ? (
+                  <HojaDePicking datos={datosPicking} onVolver={() => setDatosPicking(null)} />
+                ) : (
+                  <form onSubmit={buscarCotizacion} className="space-y-4">
+                    {errorCotizacion && <div className="alert-error">🚨 {errorCotizacion}</div>}
+                    <input
+                      type="text"
+                      required
+                      placeholder="N° Cotización (Ej: 11811)"
+                      value={cotizacion}
+                      disabled={cargandoCotizacion}
+                      onChange={(e) => setCotizacion(e.target.value)}
+                      className="form-input"
+                    />
+                    <button type="submit" disabled={cargandoCotizacion} className="btn-primary w-full">
+                      {cargandoCotizacion ? 'Consultando...' : '🔍 Buscar y Generar Ruta'}
+                    </button>
+                  </form>
+                )}
+              </div>
             )}
           </div>
-
-          <button onClick={verificarEstadoArchivo} className="btn-text mx-auto">🔄 Verificar Estado</button>
         </div>
       )}
     </div>
