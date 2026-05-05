@@ -16,9 +16,15 @@ export default function PanelAdmin({ token }) {
   const [datosKpi, setDatosKpi] = useState(null);
   const [cargandoKpis, setCargandoKpis] = useState(false);
 
+  // Estados para configuración de bodega
+  const [archivoUbicaciones, setArchivoUbicaciones] = useState(null);
+  const [estadoUbicaciones, setEstadoUbicaciones] = useState(null);
+  const [subiendoArchivo, setSubiendoArchivo] = useState(false);
+
   useEffect(() => { 
     if (pestanaActiva === 'dashboard') cargarKpis(); 
     if (pestanaActiva === 'usuarios') cargarUsuarios();
+    if (pestanaActiva === 'bodega') verificarEstadoArchivo();
   }, [pestanaActiva]);
 
   // --- FUNCIONES DEL BACKEND ---
@@ -81,6 +87,56 @@ export default function PanelAdmin({ token }) {
     }
   };
 
+  const verificarEstadoArchivo = async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/config/ubicaciones-status');
+      const data = await res.json();
+      setEstadoUbicaciones(data);
+    } catch (error) {
+      console.error("Error al verificar estado:", error);
+      setEstadoUbicaciones({ cargado: false, mensaje: "Error al conectar con el servidor" });
+    }
+  };
+
+  const handleSubirArchivo = async (e) => {
+    e.preventDefault();
+    
+    if (!archivoUbicaciones) {
+      alert("Por favor selecciona un archivo Excel");
+      return;
+    }
+
+    setSubiendoArchivo(true);
+    const formData = new FormData();
+    formData.append("file", archivoUbicaciones);
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/config/subir-ubicaciones', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert('✅ Archivo de ubicaciones cargado correctamente');
+        setArchivoUbicaciones(null);
+        verificarEstadoArchivo();
+        // Limpiar el input del archivo
+        document.getElementById('input-archivo-ubicaciones').value = '';
+      } else {
+        alert(`❌ Error: ${data.detail}`);
+      }
+    } catch (error) {
+      alert(`Error al subir archivo: ${error.message}`);
+    } finally {
+      setSubiendoArchivo(false);
+    }
+  };
+
   // --- INTERFAZ VISUAL ---
   return (
     <div className="page-bg admin-container">
@@ -88,9 +144,10 @@ export default function PanelAdmin({ token }) {
       {/* NAVEGACIÓN DE TABS */}
       <div className="mb-8 border-b border-slate-200">
         <h1 className="title-main">Centro de Administración</h1>
-        <div className="flex gap-4">
+        <div className="flex gap-4 flex-wrap">
           <button onClick={() => setPestanaActiva('dashboard')} className={pestanaActiva === 'dashboard' ? 'tab-active' : 'tab-inactive'}>📊 Dashboard KPIs</button>
           <button onClick={() => setPestanaActiva('usuarios')} className={pestanaActiva === 'usuarios' ? 'tab-active' : 'tab-inactive'}>👥 Cuentas de Personal</button>
+          <button onClick={() => setPestanaActiva('bodega')} className={pestanaActiva === 'bodega' ? 'tab-active' : 'tab-inactive'}>📦 Configuración Bodega</button>
         </div>
       </div>
 
@@ -198,6 +255,79 @@ export default function PanelAdmin({ token }) {
             )}
           </div>
 
+        </div>
+      )}
+
+      {/* VISTA 3: CONFIGURACIÓN DE BODEGA */}
+      {pestanaActiva === 'bodega' && (
+        <div className="space-y-6 animate-fade-up">
+          <div className="card-main">
+            <h2 className="title-section">📦 Gestión de Ubicaciones de Bodega</h2>
+            
+            <p className="text-sm text-slate-600 mb-6">
+              Carga el archivo Excel con las ubicaciones de los productos. Este archivo será utilizado para mostrar la ruta de picking a los preparadores.
+            </p>
+
+            {/* Estado actual del archivo */}
+            {estadoUbicaciones && (
+              <div className={`p-4 rounded-lg mb-6 ${estadoUbicaciones.cargado ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-slate-200'}`}>
+                {estadoUbicaciones.cargado ? (
+                  <>
+                    <p className="font-bold text-emerald-700">✅ Archivo Cargado</p>
+                    <p className="text-sm text-slate-700 mt-2">
+                      <strong>Nombre:</strong> {estadoUbicaciones.nombre_archivo}
+                    </p>
+                    <p className="text-sm text-slate-700">
+                      <strong>Cargado por:</strong> {estadoUbicaciones.cargado_por}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      <strong>Fecha:</strong> {new Date(estadoUbicaciones.fecha_carga).toLocaleString('es-ES')}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-slate-600">⚠️ {estadoUbicaciones.mensaje}</p>
+                )}
+              </div>
+            )}
+
+            {/* Formulario para subir archivo */}
+            <form onSubmit={handleSubirArchivo} className="space-y-4">
+              <div>
+                <label className="form-label">Seleccionar archivo Excel (.xlsx o .xls)</label>
+                <div className="flex gap-2">
+                  <input 
+                    id="input-archivo-ubicaciones"
+                    type="file" 
+                    accept=".xlsx,.xls"
+                    className="form-input flex-1"
+                    onChange={(e) => setArchivoUbicaciones(e.target.files[0])}
+                  />
+                </div>
+                {archivoUbicaciones && (
+                  <p className="text-sm text-slate-500 mt-2">📄 Archivo seleccionado: {archivoUbicaciones.name}</p>
+                )}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <p className="text-xs font-bold text-blue-900">ℹ️ Requisitos del archivo:</p>
+                <ul className="text-xs text-blue-800 mt-2 space-y-1">
+                  <li>✓ Debe tener una hoja llamada "<strong>CODIFICACION</strong>"</li>
+                  <li>✓ Debe contener una columna "<strong>SKU (CODIGO)</strong>"</li>
+                  <li>✓ Debe contener columnas de ubicación: <strong>PASILLO, HILERA, ESTAND</strong></li>
+                </ul>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={subiendoArchivo || !archivoUbicaciones}
+                className="btn-dark w-full"
+              >
+                {subiendoArchivo ? '📤 Subiendo...' : '📤 Subir Archivo de Ubicaciones'}
+              </button>
+            </form>
+          </div>
+
+          <button onClick={verificarEstadoArchivo} className="btn-text mx-auto">🔄 Verificar Estado</button>
         </div>
       )}
     </div>

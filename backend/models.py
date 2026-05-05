@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -34,3 +34,20 @@ class PrendaPicking(Base):
     cantidad = Column(Integer)
     
     registro = relationship("RegistroPicking", back_populates="prendas")
+class Inventario(Base):
+    __tablename__ = "inventario"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    sku = Column(String, unique=True, index=True) # unique=True evita SKUs duplicados
+    descripcion = Column(String)
+    ubicacion = Column(String)
+    stock = Column(Integer, default=0)
+
+class ConfiguracionBodega(Base):
+    __tablename__ = "configuracion_bodega"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    nombre_archivo = Column(String, default="ubicaciones.xlsx")
+    archivo_excel = Column(LargeBinary)  # Guardamos el archivo en bytes
+    fecha_carga = Column(DateTime, default=datetime.utcnow)
+    cargado_por = Column(String)  # Username del admin que subió el archivo

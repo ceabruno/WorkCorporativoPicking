@@ -3,8 +3,9 @@ import requests
 import pandas as pd
 from datetime import datetime
 from dotenv import load_dotenv
+from io import BytesIO
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from jose import JWTError, jwt
 
 # Importaciones de nuestros archivos locales
 from database import get_db, engine
-from models import Base, Usuario, RegistroPicking
+from models import Base, Usuario, RegistroPicking, ConfiguracionBodega
 from auth import verify_password, create_access_token, get_password_hash, SECRET_KEY, ALGORITHM
 
 # 1. CARGAR VARIABLES DE SEGURIDAD DEL ARCHIVO .ENV
@@ -50,6 +51,7 @@ class ItemPickingSchema(BaseModel):
 
 class FinalizarPickingSchema(BaseModel):
     items: list[ItemPickingSchema]
+    
 def obtener_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Desencripta el token JWT para saber quién está usando la app"""
     try:
@@ -112,6 +114,73 @@ def eliminar_usuario(usuario_id: int, db: Session = Depends(get_db), admin: Usua
     db.delete(usuario)
     db.commit()
     return {"mensaje": f"El usuario {usuario.nombre_completo} ha sido eliminado con éxito."}
+
+# ==========================================
+# RUTAS DE CONFIGURACIÓN DE BODEGA
+# ==========================================
+
+@app.post("/api/config/subir-ubicaciones")
+async def subir_ubicaciones(file: UploadFile = File(...), db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
+    """
+    Permite al administrador cargar el archivo Excel con ubicaciones de productos.
+    Solo administradores pueden subir archivos.
+    """
+    try:
+        # Validar que sea un archivo Excel
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx o .xls)")
+        
+        # Leer el archivo en memoria
+        contenido = await file.read()
+        
+        # Verificar que se puede leer como DataFrame (validación básica)
+        try:
+            df_test = pd.read_excel(BytesIO(contenido), sheet_name="CODIFICACION")
+            if "SKU (CODIGO)" not in df_test.columns:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="El archivo debe tener una hoja llamada 'CODIFICACION' con columna 'SKU (CODIGO)'"
+                )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error al leer el archivo: {str(e)}")
+        
+        # Eliminar configuración anterior (mantener solo la última)
+        db.query(ConfiguracionBodega).delete()
+        
+        # Guardar nuevo archivo en BD
+        nueva_config = ConfiguracionBodega(
+            nombre_archivo=file.filename,
+            archivo_excel=contenido,
+            cargado_por=admin.username
+        )
+        db.add(nueva_config)
+        db.commit()
+        
+        return {
+            "mensaje": "Archivo de ubicaciones cargado exitosamente",
+            "nombre_archivo": file.filename,
+            "cargado_por": admin.nombre_completo
+        }
+    
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al procesar el archivo: {str(e)}")
+
+@app.get("/api/config/ubicaciones-status")
+def obtener_estado_ubicaciones(db: Session = Depends(get_db)):
+    """Devuelve información sobre el archivo de ubicaciones cargado"""
+    config = db.query(ConfiguracionBodega).order_by(ConfiguracionBodega.fecha_carga.desc()).first()
+    
+    if not config:
+        return {"cargado": False, "mensaje": "No hay archivo de ubicaciones cargado"}
+    
+    return {
+        "cargado": True,
+        "nombre_archivo": config.nombre_archivo,
+        "fecha_carga": config.fecha_carga,
+        "cargado_por": config.cargado_por
+    }
 
 # ==========================================
 # RUTAS DEL CRONÓMETRO DE PICKING Y KPIS
@@ -223,9 +292,17 @@ def obtener_token_laudus():
 # ==========================================
 
 @app.get("/api/generar_picking/{cotizacion_id}")
-def generar_hoja_picking(cotizacion_id: str):
-    """Busca la cotización en Laudus y cruza los datos con la hoja CODIFICACION"""
+def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
+    """Busca la cotización en Laudus y cruza los datos con la hoja CODIFICACION cargada en BD"""
     try:
+        # 0. Verificar que existe archivo de ubicaciones
+        config = db.query(ConfiguracionBodega).order_by(ConfiguracionBodega.fecha_carga.desc()).first()
+        if not config:
+            raise HTTPException(
+                status_code=400, 
+                detail="No hay archivo de ubicaciones cargado. El administrador debe subir el archivo Excel primero."
+            )
+        
         # 1. Autenticación y obtención del token de Laudus
         token_laudus = obtener_token_laudus()
         
@@ -268,8 +345,8 @@ def generar_hoja_picking(cotizacion_id: str):
                 "PRECIO": round(item.get("unitPrice", 0) * 1.19)
             })
 
-        # 4. Cruce con el Archivo Excel (Hoja corregida)
-        df_ubicaciones = pd.read_excel("Layout bodega store.xlsx", sheet_name="CODIFICACION")
+        # 4. Cruce con el Archivo Excel desde BD (AHORA DESDE BASE DE DATOS)
+        df_ubicaciones = pd.read_excel(BytesIO(config.archivo_excel), sheet_name="CODIFICACION")
         df_pedidos = pd.DataFrame(productos_solicitados)
         
         # Limpieza de SKUs en el Excel igual que en tu código original
