@@ -9,5 +9,5 @@ passlib[bcrypt]
 python-multipart
 openpyxl
 pydantic
-bcrypt
+bcrypt==3.2.2
 psycopg2-binary
