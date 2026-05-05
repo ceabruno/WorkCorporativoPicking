@@ -43,7 +43,13 @@ class UsuarioNuevo(BaseModel):
     password: str
     rol: str
     nombre_completo: str
+class ItemPickingSchema(BaseModel):
+    sku: str
+    descripcion: str
+    cantidad: int
 
+class FinalizarPickingSchema(BaseModel):
+    items: list[ItemPickingSchema]
 def obtener_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Desencripta el token JWT para saber quién está usando la app"""
     try:
@@ -118,18 +124,34 @@ def iniciar_picking(cotizacion_id: str, preparador: str, db: Session = Depends(g
     return {"mensaje": "Cronómetro iniciado", "registro_id": nuevo_registro.id}
 
 @app.post("/api/finalizar_picking/{registro_id}")
-def finalizar_picking(registro_id: int, db: Session = Depends(get_db)):
-    """Detiene el reloj cuando el operario termina"""
+def finalizar_picking(registro_id: int, datos: FinalizarPickingSchema, db: Session = Depends(get_db)):
+    """Detiene el reloj y guarda los productos preparados"""
+    from models import PrendaPicking # Importamos el nuevo modelo
+    
     registro = db.query(RegistroPicking).filter(RegistroPicking.id == registro_id).first()
     if not registro:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+    
+    # Guardamos la hora de término
     registro.hora_fin = datetime.utcnow()
+    
+    # Guardamos cada producto en la nueva tabla
+    for item in datos.items:
+        nueva_prenda = PrendaPicking(
+            registro_id=registro.id,
+            sku=item.sku,
+            descripcion=item.descripcion,
+            cantidad=item.cantidad
+        )
+        db.add(nueva_prenda)
+
     db.commit()
-    return {"mensaje": "Picking finalizado con éxito"}
+    return {"mensaje": "Picking finalizado y productos registrados con éxito"}
 
 @app.get("/api/kpis")
 def obtener_kpis(db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
-    """Calcula los tiempos de picking para el Dashboard"""
+    from models import PrendaPicking # Importamos el modelo
+    
     registros = db.query(RegistroPicking).filter(RegistroPicking.hora_fin.isnot(None)).all()
     kpis_preparadores = {}
     
@@ -137,10 +159,8 @@ def obtener_kpis(db: Session = Depends(get_db), admin: Usuario = Depends(solo_ad
         tiempo_segundos = (r.hora_fin - r.hora_inicio).total_seconds()
         minutos = tiempo_segundos / 60.0
         nombre = r.nombre_preparador
-        
         if nombre not in kpis_preparadores:
             kpis_preparadores[nombre] = {"total_pedidos": 0, "tiempo_total": 0}
-            
         kpis_preparadores[nombre]["total_pedidos"] += 1
         kpis_preparadores[nombre]["tiempo_total"] += minutos
 
@@ -148,16 +168,28 @@ def obtener_kpis(db: Session = Depends(get_db), admin: Usuario = Depends(solo_ad
     for nombre, datos in kpis_preparadores.items():
         promedio = datos["tiempo_total"] / datos["total_pedidos"]
         resultados.append({
-            "nombre": nombre,
-            "total_pedidos": datos["total_pedidos"],
-            "tiempo_promedio_minutos": round(promedio, 2)
+            "nombre": nombre, "total_pedidos": datos["total_pedidos"], "tiempo_promedio_minutos": round(promedio, 2)
         })
-        
     resultados = sorted(resultados, key=lambda x: x["tiempo_promedio_minutos"])
+
+    # --- NUEVA LÍNEA: LÓGICA DE PRENDAS MÁS VENDIDAS ---
+    prendas_db = db.query(PrendaPicking).all()
+    conteo_prendas = {}
+    for p in prendas_db:
+        # Usamos el SKU y nombre como identificador único
+        clave = f"{p.sku} | {p.descripcion}" 
+        conteo_prendas[clave] = conteo_prendas.get(clave, 0) + p.cantidad
+
+    # Ordenamos de mayor a menor y tomamos el Top 5
+    top_prendas = sorted(
+        [{"nombre": k.split(" | ")[1], "sku": k.split(" | ")[0], "cantidad": v} for k, v in conteo_prendas.items()],
+        key=lambda x: x["cantidad"], reverse=True
+    )[:5]
 
     return {
         "total_pickings_historico": len(registros),
-        "estadisticas_preparadores": resultados
+        "estadisticas_preparadores": resultados,
+        "top_prendas": top_prendas # Lo enviamos a React
     }
 
 # ==========================================

@@ -23,3 +23,14 @@ class RegistroPicking(Base):
     hora_inicio = Column(DateTime, default=datetime.utcnow)
     hora_fin = Column(DateTime, nullable=True)
     preparador = relationship("Usuario", back_populates="pickings")
+    prendas = relationship("PrendaPicking", back_populates="registro")
+
+class PrendaPicking(Base):
+    __tablename__ = "prendas_picking"
+    id = Column(Integer, primary_key=True, index=True)
+    registro_id = Column(Integer, ForeignKey("registros_picking.id"))
+    sku = Column(String, index=True)
+    descripcion = Column(String)
+    cantidad = Column(Integer)
+    
+    registro = relationship("RegistroPicking", back_populates="prendas")
