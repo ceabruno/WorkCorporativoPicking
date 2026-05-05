@@ -23,21 +23,23 @@ function App() {
   if (!token) return <Login onLoginExitoso={manejarLoginExitoso} />;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-graphite-dark text-white px-6 py-3 flex justify-between items-center shadow-md print:hidden">
-        <div className="font-black tracking-widest text-lg">
-          WORK<span className="text-work-red font-light">STORE</span>
+    <div className="page-bg">
+      <nav className="nav-bar">
+        <div className="nav-logo">
+          WORK<span className="text-work-red font-light">CORPORATIVO</span>
         </div>
-        <div className="flex items-center gap-6">
-          <div className="text-sm">
-            <span className="text-slate-400">Usuario: </span><span className="font-bold">{nombre}</span> 
-            <span className="ml-2 text-[10px] bg-slate-700 px-2 py-1 rounded-full uppercase">{rol}</span>
+        <div className="nav-user">
+          <div>
+            <span className="text-slate-400">Usuario: </span>
+            <span className="font-bold">{nombre}</span> 
+            <span className="nav-badge">{rol}</span>
           </div>
-          <button onClick={cerrarSesion} className="text-sm font-bold text-red-400 hover:text-red-300">
+          <button onClick={cerrarSesion} className="btn-logout">
             Cerrar Sesión
           </button>
         </div>
       </nav>
+
       <main>
         {rol === 'admin' && <PanelAdmin token={token} />}
         {(rol === 'preparador' || rol === 'bodega') && <PanelPicker nombreUsuario={nombre} />}
@@ -45,4 +47,5 @@ function App() {
     </div>
   );
 }
+
 export default App;

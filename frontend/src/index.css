@@ -1,29 +1,88 @@
 @import "tailwindcss";
 
-/* Aquí agregamos los colores corporativos que usas en tu diseño */
+/* =========================================
+   1. CONFIGURACIÓN DE TEMA (Tailwind v4)
+   ========================================= */
 @theme {
-  --color-work-red: #dc2626;
-  --color-work-red-hover: #b91c1c;
-  --color-graphite: #334155;
+  /* Colores de Marca Personalizados */
   --color-graphite-dark: #1e293b;
-}
+  --color-work-red: #dc2626;
 
-/* Clases útiles para animación que tenías en tus componentes */
-@layer utilities {
-  .animate-fade-in {
-    animation: fadeIn 0.5s ease-in-out;
+  /* Animaciones Personalizadas */
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-fade-up: fade-up 0.4s ease-out;
+  --animate-fade-down: fade-down 0.4s ease-out;
+  --animate-pop-in: pop-in 0.3s ease-out forwards;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
-  .animate-pop-in {
-    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-down {
+    from { opacity: 0; transform: translateY(-15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
   }
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+/* =========================================
+   2. CLASES CSS SEMÁNTICAS (DICCIONARIO)
+   ========================================= */
+@layer components {
+  /* Estructura General y Contenedores */
+  .page-bg { @apply min-h-screen bg-slate-50; }
+  .auth-container { @apply flex flex-col justify-center py-12 sm:px-6 lg:px-8; }
+  .main-container { @apply flex justify-center p-8 mt-10 animate-fade-in; }
+  .admin-container { @apply p-6 md:p-12 animate-fade-in max-w-5xl mx-auto; }
 
-@keyframes popIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  /* Barra de Navegación */
+  .nav-bar { @apply bg-graphite-dark text-white px-6 py-3 flex justify-between items-center shadow-md print:hidden; }
+  .nav-logo { @apply font-black tracking-widest text-lg; }
+  .nav-user { @apply flex items-center gap-6 text-sm; }
+  .nav-badge { @apply ml-2 text-[10px] bg-slate-700 px-2 py-1 rounded-full uppercase; }
+
+  /* Tarjetas y Paneles (Cards) */
+  .card-main { @apply bg-white p-8 rounded-2xl shadow-xl border border-slate-200; }
+  .card-kpi { @apply bg-white p-6 rounded-2xl shadow border border-slate-200; }
+  .card-item { @apply bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100; }
+
+  /* Títulos y Textos */
+  .title-main { @apply text-3xl font-black text-graphite-dark mb-6; }
+  .title-section { @apply text-xl font-black mb-6 text-graphite-dark; }
+  .title-card { @apply text-lg font-black text-graphite-dark mb-4; }
+  .label-kpi { @apply text-sm font-bold text-slate-400 uppercase tracking-widest mb-1; }
+  .value-kpi { @apply text-4xl font-black text-graphite-dark; }
+
+  /* Formularios y Alertas */
+  .form-label { @apply block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1; }
+  .form-input { @apply w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-work-red/20 focus:border-work-red transition-all text-slate-700; }
+  .alert-error { @apply mb-4 p-4 rounded-xl text-sm font-bold text-center border bg-red-50 text-work-red border-red-200; }
+  .alert-success { @apply mb-4 p-4 rounded-xl text-sm font-bold text-center border bg-emerald-50 text-emerald-700 border-emerald-200; }
+
+  /* Botones Interactivos (CORREGIDO) */
+  .btn-primary { @apply flex justify-center items-center font-bold py-3 px-4 rounded-xl active:scale-95 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed w-full text-white bg-work-red hover:bg-red-700 hover:shadow-lg shadow-md; }
+  .btn-dark { @apply flex justify-center items-center font-bold py-3 px-4 rounded-xl active:scale-95 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed w-full text-white bg-graphite-dark hover:bg-slate-800 hover:shadow-lg shadow-md; }
+  .btn-success { @apply flex justify-center items-center font-bold py-3 px-4 rounded-xl active:scale-95 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed text-white bg-emerald-600 hover:bg-emerald-700 hover:shadow-lg shadow-md; }
+  .btn-logout { @apply text-sm font-bold text-red-400 hover:text-red-300 transition-colors; }
+  /* NUEVA CLASE PARA BOTONES DESACTIVADOS */
+  .btn-disabled { @apply flex justify-center items-center font-bold py-3 px-4 rounded-xl text-white bg-slate-400 cursor-not-allowed shadow-none; }
+  .btn-delete { @apply bg-red-100 text-work-red hover:bg-red-200 px-3 py-1 rounded-lg font-bold text-xs transition-colors active:scale-95; }
+  .btn-text { @apply text-sm font-bold text-slate-500 hover:text-work-red transition-colors flex items-center justify-center gap-2; }
+  .btn-logout { @apply text-sm font-bold text-red-400 hover:text-red-300 transition-colors; }
+
+  /* Pestañas (Tabs) */
+  .tab-active { @apply pb-3 px-4 font-bold transition-all text-work-red border-b-4 border-work-red; }
+  .tab-inactive { @apply pb-3 px-4 font-bold transition-all text-slate-400 hover:text-slate-600; }
+
+  /* Tabla de Impresión (Hoja de Picking) */
+  .print-table { @apply w-full text-left text-xs print:text-[10px]; }
+  .print-th { @apply py-2 border-b-2 border-black; }
+  .print-td { @apply py-2 border-b; }
 }

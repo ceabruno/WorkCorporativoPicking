@@ -90,21 +90,28 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         "rol": usuario.rol
     }
 
-@app.post("/api/usuarios")
-def crear_usuario_web(nuevo_usuario: UsuarioNuevo, db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
-    """Crea un usuario nuevo (Solo admins pueden usar esto)"""
-    if db.query(Usuario).filter(Usuario.username == nuevo_usuario.username).first():
-        raise HTTPException(status_code=400, detail="El nombre de usuario ya está en uso")
+@app.get("/api/usuarios")
+def listar_usuarios(db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
+    """Obtiene la lista de todos los usuarios registrados (Solo para administradores)"""
+    usuarios = db.query(Usuario).all()
+    # Devolvemos una lista, pero excluimos las contraseñas encriptadas por seguridad
+    return [{"id": u.id, "username": u.username, "nombre_completo": u.nombre_completo, "rol": u.rol} for u in usuarios]
+
+@app.delete("/api/usuarios/{usuario_id}")
+def eliminar_usuario(usuario_id: int, db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
+    """Busca un usuario por su ID y lo elimina de la base de datos"""
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    # Medida de seguridad vital: Evitar auto-eliminación
+    if usuario.username == admin.username:
+        raise HTTPException(status_code=400, detail="Acción bloqueada: No puedes eliminar tu propia cuenta.")
         
-    usuario_bd = Usuario(
-        username=nuevo_usuario.username,
-        hashed_password=get_password_hash(nuevo_usuario.password),
-        rol=nuevo_usuario.rol,
-        nombre_completo=nuevo_usuario.nombre_completo
-    )
-    db.add(usuario_bd)
+    db.delete(usuario)
     db.commit()
-    return {"mensaje": f"Usuario '{nuevo_usuario.nombre_completo}' creado con éxito!"}
+    return {"mensaje": f"El usuario {usuario.nombre_completo} ha sido eliminado con éxito."}
 
 # ==========================================
 # RUTAS DEL CRONÓMETRO DE PICKING Y KPIS
