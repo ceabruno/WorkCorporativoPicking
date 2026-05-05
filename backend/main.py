@@ -366,7 +366,15 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
         # Cruce de datos
         ruta_final = pd.merge(df_pedidos, df_ubicaciones, on="SKU (CODIGO)", how="left")
         ruta_final = ruta_final.fillna("SIN UBICACIÓN")
-        
+
+        # Normalizar ubicación para el frontend
+        if "UBICACION" not in ruta_final.columns and all(col in ruta_final.columns for col in ['PASILLO', 'HILERA', 'ESTAND']):
+            ruta_final['UBICACION'] = ruta_final.apply(
+                lambda row: f"P{row['PASILLO']} - H{row['HILERA']} - E{row['ESTAND']}", axis=1
+            )
+        elif "UBICACIÓN" in ruta_final.columns and "UBICACION" not in ruta_final.columns:
+            ruta_final['UBICACION'] = ruta_final['UBICACIÓN']
+
         # Ordenamiento de la ruta
         if all(col in ruta_final.columns for col in ['PASILLO', 'HILERA', 'ESTAND']):
             ruta_final['PASILLO'] = ruta_final['PASILLO'].astype(str)
