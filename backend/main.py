@@ -33,6 +33,7 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5173")  # 5173 es el 
 
 allowed_origins = [
     FRONTEND_URL,
+    "https://work-corporativo-picking.vercel.app",
     "http://127.0.0.1:5173",
     "http://localhost:5173",
     "http://127.0.0.1:3000",
