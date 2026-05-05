@@ -47,7 +47,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+# Añade esto en backend/main.py para hacer una prueba rápida
+@app.get("/api/ping")
+def ping_prueba():
+    """Ruta simple para verificar si CORS y el servidor funcionan."""
+    return {"mensaje": "¡Conexión exitosa, CORS está funcionando!"}
 # 3. CONFIGURACIÓN DE SEGURIDAD (WMS)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
 
