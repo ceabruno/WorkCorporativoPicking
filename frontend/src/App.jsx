@@ -41,8 +41,8 @@ function App() {
       </nav>
 
       <main>
-        {rol === 'admin' && <PanelAdmin token={token} />}
-        {(rol === 'preparador' || rol === 'bodega') && <PanelPicker nombreUsuario={nombre} />}
+        {(rol === 'admin' || rol === 'bodega') && <PanelAdmin token={token} rol={rol} nombre={nombre} />}
+        {rol === 'preparador' && <PanelPicker nombreUsuario={nombre} />}
       </main>
     </div>
   );

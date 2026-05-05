@@ -62,6 +62,10 @@ class ItemPickingSchema(BaseModel):
 
 class FinalizarPickingSchema(BaseModel):
     items: list[ItemPickingSchema]
+
+class CambiarPasswordSchema(BaseModel):
+    nueva_password: str
+    actual_password: str | None = None
     
 def obtener_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Desencripta el token JWT para saber quién está usando la app"""
@@ -82,6 +86,13 @@ def solo_admin(usuario_actual: Usuario = Depends(obtener_usuario_actual)):
     """Bloquea el acceso si el usuario no es administrador"""
     if usuario_actual.rol != "admin":
         raise HTTPException(status_code=403, detail="Acceso denegado: Se requiere rol de administrador")
+    return usuario_actual
+
+
+def admin_o_bodega(usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Permite el acceso a administradores y jefes de bodega"""
+    if usuario_actual.rol not in ["admin", "bodega"]:
+        raise HTTPException(status_code=403, detail="Acceso denegado: Se requiere rol de administrador o jefe de bodega")
     return usuario_actual
 
 # ==========================================
@@ -133,6 +144,24 @@ def listar_usuarios(db: Session = Depends(get_db), admin: Usuario = Depends(solo
     # Devolvemos una lista, pero excluimos las contraseñas encriptadas por seguridad
     return [{"id": u.id, "username": u.username, "nombre_completo": u.nombre_completo, "rol": u.rol} for u in usuarios]
 
+@app.post("/api/usuarios/{usuario_id}/cambiar_password")
+def cambiar_password(usuario_id: int, datos: CambiarPasswordSchema, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Permite cambiar la contraseña de un usuario. El admin puede cambiar cualquier cuenta."""
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if usuario_actual.rol != "admin" and usuario_actual.id != usuario_id:
+        raise HTTPException(status_code=403, detail="Acceso denegado: no puedes cambiar la contraseña de otro usuario")
+
+    if usuario_actual.rol != "admin":
+        if not datos.actual_password or not verify_password(datos.actual_password, usuario.hashed_password):
+            raise HTTPException(status_code=401, detail="Contraseña actual incorrecta")
+
+    usuario.hashed_password = get_password_hash(datos.nueva_password)
+    db.commit()
+    return {"mensaje": "Contraseña actualizada con éxito"}
+
 @app.delete("/api/usuarios/{usuario_id}")
 def eliminar_usuario(usuario_id: int, db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
     """Busca un usuario por su ID y lo elimina de la base de datos"""
@@ -154,10 +183,9 @@ def eliminar_usuario(usuario_id: int, db: Session = Depends(get_db), admin: Usua
 # ==========================================
 
 @app.post("/api/config/subir-ubicaciones")
-async def subir_ubicaciones(file: UploadFile = File(...), db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
+async def subir_ubicaciones(file: UploadFile = File(...), db: Session = Depends(get_db), usuario_actual: Usuario = Depends(admin_o_bodega)):
     """
-    Permite al administrador cargar el archivo Excel con ubicaciones de productos.
-    Solo administradores pueden subir archivos.
+    Permite que administradores o jefes de bodega carguen el archivo Excel con ubicaciones de productos.
     """
     try:
         # Validar que sea un archivo Excel
@@ -185,7 +213,7 @@ async def subir_ubicaciones(file: UploadFile = File(...), db: Session = Depends(
         nueva_config = ConfiguracionBodega(
             nombre_archivo=file.filename,
             archivo_excel=contenido,
-            cargado_por=admin.username
+            cargado_por=usuario_actual.username
         )
         db.add(nueva_config)
         db.commit()
@@ -193,7 +221,7 @@ async def subir_ubicaciones(file: UploadFile = File(...), db: Session = Depends(
         return {
             "mensaje": "Archivo de ubicaciones cargado exitosamente",
             "nombre_archivo": file.filename,
-            "cargado_por": admin.nombre_completo
+            "cargado_por": usuario_actual.nombre_completo
         }
     
     except HTTPException as e:

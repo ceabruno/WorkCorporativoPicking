@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import API_URL from '../config';
 
-export default function PanelAdmin({ token }) {
+export default function PanelAdmin({ token, rol }) {
   const [pestanaActiva, setPestanaActiva] = useState('dashboard');
+  const esAdmin = rol === 'admin';
   
   // Estados para creación
   const [formData, setFormData] = useState({ username: '', password: '', nombre_completo: '', rol: 'preparador' });
@@ -24,9 +25,9 @@ export default function PanelAdmin({ token }) {
 
   useEffect(() => { 
     if (pestanaActiva === 'dashboard') cargarKpis(); 
-    if (pestanaActiva === 'usuarios') cargarUsuarios();
+    if (pestanaActiva === 'usuarios' && esAdmin) cargarUsuarios();
     if (pestanaActiva === 'bodega') verificarEstadoArchivo();
-  }, [pestanaActiva]);
+  }, [pestanaActiva, esAdmin]);
 
   // --- FUNCIONES DEL BACKEND ---
   const cargarKpis = async () => {
@@ -85,6 +86,31 @@ export default function PanelAdmin({ token }) {
       }
     } catch (err) {
       alert("Error de conexión al intentar eliminar el usuario.");
+    }
+  };
+
+  const handleCambiarPassword = async (usuario) => {
+    const nuevaPassword = window.prompt(`Nueva contraseña para ${usuario.nombre_completo}:`);
+    if (!nuevaPassword) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/usuarios/${usuario.id}/cambiar_password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ nueva_password: nuevaPassword })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        alert('✅ Contraseña actualizada correctamente');
+      } else {
+        alert(`Error: ${data.detail}`);
+      }
+    } catch (err) {
+      alert('Error de conexión al cambiar la contraseña.');
     }
   };
 
@@ -147,7 +173,7 @@ export default function PanelAdmin({ token }) {
         <h1 className="title-main">Centro de Administración</h1>
         <div className="flex gap-4 flex-wrap">
           <button onClick={() => setPestanaActiva('dashboard')} className={pestanaActiva === 'dashboard' ? 'tab-active' : 'tab-inactive'}>📊 Dashboard KPIs</button>
-          <button onClick={() => setPestanaActiva('usuarios')} className={pestanaActiva === 'usuarios' ? 'tab-active' : 'tab-inactive'}>👥 Cuentas de Personal</button>
+          {esAdmin && <button onClick={() => setPestanaActiva('usuarios')} className={pestanaActiva === 'usuarios' ? 'tab-active' : 'tab-inactive'}>👥 Cuentas de Personal</button>}
           <button onClick={() => setPestanaActiva('bodega')} className={pestanaActiva === 'bodega' ? 'tab-active' : 'tab-inactive'}>📦 Configuración Bodega</button>
         </div>
       </div>
@@ -238,14 +264,22 @@ export default function PanelAdmin({ token }) {
                     </div>
                     
                     {/* CONDICIÓN AÑADIDA: Solo muestra el botón si el rol NO es admin */}
-                    {usuario.rol !== 'admin' && (
+                    <div className="flex gap-2">
+                      {usuario.rol !== 'admin' && (
+                        <button 
+                          onClick={() => handleEliminarUsuario(usuario.id, usuario.nombre_completo)}
+                          className="btn-delete"
+                        >
+                          🗑️ Eliminar
+                        </button>
+                      )}
                       <button 
-                        onClick={() => handleEliminarUsuario(usuario.id, usuario.nombre_completo)}
-                        className="btn-delete"
+                        onClick={() => handleCambiarPassword(usuario)}
+                        className="btn-secondary"
                       >
-                        🗑️ Eliminar
+                        🔐 Cambiar contraseña
                       </button>
-                    )}
+                    </div>
                   </div>
                 ))}
                 
