@@ -28,7 +28,13 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const [archivoUbicaciones, setArchivoUbicaciones] = useState(null);
   const [estadoUbicaciones, setEstadoUbicaciones] = useState(null);
   const [subiendoArchivo, setSubiendoArchivo] = useState(false);
-  const [subPestanaBodega, setSubPestanaBodega] = useState('ubicaciones');
+  const [subPestanaBodega, setSubPestanaBodega] = useState('cotizacion');
+
+  useEffect(() => {
+    if (pestanaActiva === 'bodega') {
+      setSubPestanaBodega('cotizacion');
+    }
+  }, [pestanaActiva]);
 
   // Estados para cotización / hoja de picking
   const [cotizacion, setCotizacion] = useState('');
