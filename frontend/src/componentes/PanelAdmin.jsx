@@ -20,14 +20,11 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const [listaUsuarios, setListaUsuarios] = useState([]);
   const [cargandoUsuarios, setCargandoUsuarios] = useState(false);
 
-  // Estados del Dashboard y Filtros
+  // Estados del Dashboard y Filtros (Simplificados a Desde-Hasta)
   const [datosKpi, setDatosKpi] = useState(null);
   const [cargandoKpis, setCargandoKpis] = useState(false);
-  const [filtroMes, setFiltroMes] = useState('');
-  const [filtroAnio, setFiltroAnio] = useState('');
   const [filtroInicio, setFiltroInicio] = useState('');
   const [filtroFin, setFiltroFin] = useState('');
-  const [filtroActivo, setFiltroActivo] = useState('');
   const [borrandoKpis, setBorrandoKpis] = useState(false);
   
   // Estados para filtros avanzados y descargas
@@ -66,6 +63,12 @@ export default function PanelAdmin({ token, rol, nombre }) {
 
   // --- FUNCIONES DEL BACKEND ---
   const cargarKpis = async () => {
+    // Validamos que si se llena una fecha, se llene la otra
+    if ((filtroInicio && !filtroFin) || (!filtroInicio && filtroFin)) {
+      alert("Debes seleccionar tanto la fecha 'Desde' como 'Hasta' para filtrar por rango.");
+      return;
+    }
+
     setCargandoKpis(true);
     setPaginaDetalle(1);
     setPaginaPrendas(1);
@@ -73,9 +76,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
     try {
       let queryParams = new URLSearchParams();
       
-      if (filtroActivo === 'mes' && filtroMes) queryParams.append('mes', filtroMes);
-      else if (filtroActivo === 'anio' && filtroAnio) queryParams.append('anio', filtroAnio);
-      else if (filtroActivo === 'rango' && filtroInicio && filtroFin) {
+      if (filtroInicio && filtroFin) {
         queryParams.append('inicio', filtroInicio);
         queryParams.append('fin', filtroFin);
       }
@@ -98,12 +99,16 @@ export default function PanelAdmin({ token, rol, nombre }) {
   };
 
   const handleDescargarExcel = async () => {
+    if ((filtroInicio && !filtroFin) || (!filtroInicio && filtroFin)) {
+      alert("Para exportar un rango, debes seleccionar fecha 'Desde' y 'Hasta'.");
+      return;
+    }
+
     setDescargandoExcel(true);
     try {
       let queryParams = new URLSearchParams();
-      if (filtroActivo === 'mes' && filtroMes) queryParams.append('mes', filtroMes);
-      else if (filtroActivo === 'anio' && filtroAnio) queryParams.append('anio', filtroAnio);
-      else if (filtroActivo === 'rango' && filtroInicio && filtroFin) {
+      
+      if (filtroInicio && filtroFin) {
         queryParams.append('inicio', filtroInicio);
         queryParams.append('fin', filtroFin);
       }
@@ -135,35 +140,19 @@ export default function PanelAdmin({ token, rol, nombre }) {
     }
   };
 
-  const handleFiltroMesChange = (e) => {
-    setFiltroMes(e.target.value);
-    setFiltroAnio('');
-    setFiltroInicio('');
-    setFiltroFin('');
-    setFiltroActivo('mes');
-  };
-
-  const handleFiltroAnioChange = (e) => {
-    setFiltroAnio(e.target.value);
-    setFiltroMes('');
-    setFiltroInicio('');
-    setFiltroFin('');
-    setFiltroActivo('anio');
-  };
-
   const handleBorrarKpis = async () => {
     let query = '';
     let label = 'todo el histórico';
 
-    if (filtroActivo === 'mes' && filtroMes) {
-      query = `?mes=${filtroMes}`;
-      label = filtroMes;
-    } else if (filtroActivo === 'anio' && filtroAnio) {
-      query = `?anio=${filtroAnio}`;
-      label = `año ${filtroAnio}`;
+    if (filtroInicio && filtroFin) {
+      query = `?inicio=${filtroInicio}&fin=${filtroFin}`;
+      label = `el rango ${filtroInicio} a ${filtroFin}`;
+    } else if (filtroInicio || filtroFin) {
+      alert("Para borrar un rango, debes seleccionar fecha 'Desde' y 'Hasta'.");
+      return;
     }
 
-    const confirmar = window.confirm(`¿Borrar registros de KPI de ${label}? Esta acción no se puede deshacer.`);
+    const confirmar = window.confirm(`¿Estás seguro de borrar los registros de ${label}? Esta acción es permanente.`);
     if (!confirmar) return;
 
     setBorrandoKpis(true);
@@ -344,7 +333,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
       {pestanaActiva === 'dashboard' && (
         <div className="space-y-6 animate-fade-up">
           
-          {/* Tarjetas de Resumen General */}
           <div className="grid md:grid-cols-2 gap-4">
             <div className="card-kpi">
               <h2 className="label-kpi">Total Pedidos Procesados</h2>
@@ -360,33 +348,37 @@ export default function PanelAdmin({ token, rol, nombre }) {
           <div className="card-kpi">
             <div className="grid gap-4 lg:grid-cols-4 mb-6 items-end">
               <div>
-                <label className="form-label">Filtrar por Preparador</label>
+                <label className="form-label">Filtrar por Personal</label>
                 <select 
                   className="form-input" 
                   value={filtroPreparador} 
                   onChange={(e) => setFiltroPreparador(e.target.value)}
                 >
                   <option value="">Todos los usuarios</option>
-                  {listaUsuarios.filter(u => u.rol === 'preparador').map(u => (
-                    <option key={u.id} value={u.nombre_completo}>{u.nombre_completo}</option>
+                  {/* Aquí añadimos a los jefes de bodega al filtro usando || (Ó) */}
+                  {listaUsuarios.filter(u => u.rol === 'preparador' || u.rol === 'bodega').map(u => (
+                    <option key={u.id} value={u.nombre_completo}>{u.nombre_completo} ({u.rol})</option>
                   ))}
                 </select>
               </div>
+              
+              {/* Cambiado a formato Desde-Hasta */}
               <div>
-                <label className="form-label">Filtrar por mes</label>
-                <input type="month" value={filtroMes} onChange={handleFiltroMesChange} className="form-input" />
+                <label className="form-label">Desde</label>
+                <input type="date" value={filtroInicio} onChange={(e) => setFiltroInicio(e.target.value)} className="form-input" />
               </div>
               <div>
-                <label className="form-label">Filtrar por año</label>
-                <input type="number" min="2000" max="2100" placeholder="Ej: 2026" value={filtroAnio} onChange={handleFiltroAnioChange} className="form-input" />
+                <label className="form-label">Hasta</label>
+                <input type="date" value={filtroFin} onChange={(e) => setFiltroFin(e.target.value)} className="form-input" />
               </div>
+              
               <div className="flex gap-2">
                  <button onClick={cargarKpis} className="btn-primary w-full"><IconFilter size={16} className="inline mr-1" /> Filtrar</button>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-3 items-center pt-4 border-t border-slate-100">
-              <button onClick={() => { setFiltroMes(''); setFiltroAnio(''); setFiltroInicio(''); setFiltroFin(''); setFiltroActivo(''); setFiltroPreparador(''); cargarKpis(); }} className="btn-secondary">Limpiar Filtros</button>
+              <button onClick={() => { setFiltroInicio(''); setFiltroFin(''); setFiltroPreparador(''); cargarKpis(); }} className="btn-secondary">Limpiar Filtros</button>
               <button onClick={handleDescargarExcel} disabled={descargandoExcel} className="btn-success">
                 {descargandoExcel ? 'Generando Excel...' : 'Exportar a Excel'}
               </button>
@@ -397,7 +389,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
           </div>
 
           <div className="card-kpi">
-            <h2 className="title-card">Rendimiento por Preparador (Tiempos Promedio)</h2>
+            <h2 className="title-card">Rendimiento por Personal (Tiempos Promedio)</h2>
             {cargandoKpis ? <p>Cargando...</p> : (
               <div className="grid gap-4 md:grid-cols-2">
                 {datosKpi?.estadisticas_preparadores?.map((prep, i) => (
@@ -415,9 +407,8 @@ export default function PanelAdmin({ token, rol, nombre }) {
 
           {/* Tablas de Detalles y Prendas (Apiladas verticalmente con flex-col) */}
           {cargandoKpis ? <p className="text-center font-bold text-slate-500 py-8">Cargando métricas...</p> : (
-            <div className="flex flex-col gap-10"> {/* <-- AQUÍ ESTÁ EL CAMBIO PRINCIPAL */}
+            <div className="flex flex-col gap-10">
               
-              {/* Tabla 1: Tiempos por Cotización */}
               <div className="card-kpi w-full">
                 <h2 className="title-card">Registro de Tiempos por Cotización</h2>
                 <div className="space-y-3 mb-4">
@@ -433,7 +424,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
                   {detallesPaginados.length === 0 && <p className="text-sm text-slate-400">No hay registros.</p>}
                 </div>
                 
-                {/* Paginador (con margen superior mt-6 para dar espacio) */}
                 {totalPaginasDetalle > 1 && (
                   <div className="flex justify-between items-center text-sm mt-6">
                     <button onClick={() => setPaginaDetalle(p => Math.max(1, p - 1))} disabled={paginaDetalle === 1} className="btn-secondary py-2 px-4">Anterior</button>
@@ -443,7 +433,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
                 )}
               </div>
 
-              {/* Tabla 2: Registro Completo de Prendas */}
               <div className="card-kpi w-full">
                 <h2 className="title-card">Registro de Prendas Procesadas</h2>
                 <div className="space-y-3 mb-4">
@@ -459,7 +448,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
                   {prendasPaginadas.length === 0 && <p className="text-sm text-slate-400">No hay registros.</p>}
                 </div>
 
-                {/* Paginador (con margen superior mt-6 para dar espacio) */}
                 {totalPaginasPrendas > 1 && (
                   <div className="flex justify-between items-center text-sm mt-6">
                     <button onClick={() => setPaginaPrendas(p => Math.max(1, p - 1))} disabled={paginaPrendas === 1} className="btn-secondary py-2 px-4">Anterior</button>
