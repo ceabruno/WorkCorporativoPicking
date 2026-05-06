@@ -1,11 +1,11 @@
 import os
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from io import BytesIO
 
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -94,6 +94,38 @@ def admin_o_bodega(usuario_actual: Usuario = Depends(obtener_usuario_actual)):
     if usuario_actual.rol not in ["admin", "bodega"]:
         raise HTTPException(status_code=403, detail="Acceso denegado: Se requiere rol de administrador o jefe de bodega")
     return usuario_actual
+
+
+def construir_rango_mes(mes: str) -> tuple[datetime, datetime]:
+    """Convierte YYYY-MM en un rango [inicio, fin) para filtrar registros."""
+    try:
+        year, month = map(int, mes.split('-'))
+        inicio = datetime(year, month, 1)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato de mes inválido. Use YYYY-MM")
+
+    if month == 12:
+        fin = datetime(year + 1, 1, 1)
+    else:
+        fin = datetime(year, month + 1, 1)
+    return inicio, fin
+
+
+def construir_rango_anio(anio: int) -> tuple[datetime, datetime]:
+    """Convierte un año en un rango completo de fechas."""
+    if anio < 1900 or anio > 2100:
+        raise HTTPException(status_code=400, detail="Año inválido")
+    inicio = datetime(anio, 1, 1)
+    fin = datetime(anio + 1, 1, 1)
+    return inicio, fin
+
+
+def parse_fecha_str(fecha: str) -> datetime:
+    """Convierte YYYY-MM-DD en datetime."""
+    try:
+        return datetime.strptime(fecha, "%Y-%m-%d")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD")
 
 # ==========================================
 # RUTAS DE USUARIOS Y LOGIN
@@ -287,10 +319,34 @@ def finalizar_picking(registro_id: int, datos: FinalizarPickingSchema, db: Sessi
     return {"mensaje": "Picking finalizado y productos registrados con éxito"}
 
 @app.get("/api/kpis")
-def obtener_kpis(db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
+def obtener_kpis(
+    db: Session = Depends(get_db),
+    admin: Usuario = Depends(solo_admin),
+    mes: str | None = Query(None, regex=r'^\d{4}-\d{2}$'),
+    anio: int | None = Query(None, ge=1900, le=2100),
+    inicio: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$'),
+    fin: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$')
+):
     from models import PrendaPicking # Importamos el modelo
     
-    registros = db.query(RegistroPicking).filter(RegistroPicking.hora_fin.isnot(None)).all()
+    query = db.query(RegistroPicking).filter(RegistroPicking.hora_fin.isnot(None))
+
+    if inicio or fin:
+        if not inicio or not fin:
+            raise HTTPException(status_code=400, detail="Debes proporcionar inicio y fin para el rango de fechas")
+        inicio_dt = parse_fecha_str(inicio)
+        fin_dt = parse_fecha_str(fin) + timedelta(days=1)
+        if inicio_dt >= fin_dt:
+            raise HTTPException(status_code=400, detail="El rango de fechas es inválido")
+        query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
+    elif mes:
+        inicio_dt, fin_dt = construir_rango_mes(mes)
+        query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
+    elif anio:
+        inicio_dt, fin_dt = construir_rango_anio(anio)
+        query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
+
+    registros = query.all()
     kpis_preparadores = {}
     
     for r in registros:
@@ -328,6 +384,53 @@ def obtener_kpis(db: Session = Depends(get_db), admin: Usuario = Depends(solo_ad
         "total_pickings_historico": len(registros),
         "estadisticas_preparadores": resultados,
         "top_prendas": top_prendas # Lo enviamos a React
+    }
+
+@app.delete("/api/kpis")
+def borrar_kpis(
+    db: Session = Depends(get_db),
+    admin: Usuario = Depends(solo_admin),
+    mes: str | None = Query(None, regex=r'^\d{4}-\d{2}$'),
+    anio: int | None = Query(None, ge=1900, le=2100),
+    inicio: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$'),
+    fin: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$')
+):
+    from models import PrendaPicking
+
+    query = db.query(RegistroPicking).filter(RegistroPicking.hora_fin.isnot(None))
+
+    filtro_texto = 'histórico completo'
+    if inicio or fin:
+        if not inicio or not fin:
+            raise HTTPException(status_code=400, detail="Debes proporcionar inicio y fin para el rango de fechas")
+        inicio_dt = parse_fecha_str(inicio)
+        fin_dt = parse_fecha_str(fin) + timedelta(days=1)
+        if inicio_dt >= fin_dt:
+            raise HTTPException(status_code=400, detail="El rango de fechas es inválido")
+        query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
+        filtro_texto = f"del rango {inicio} a {fin}"
+    elif mes:
+        inicio_dt, fin_dt = construir_rango_mes(mes)
+        query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
+        filtro_texto = f"de {mes}"
+    elif anio:
+        inicio_dt, fin_dt = construir_rango_anio(anio)
+        query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
+        filtro_texto = f"del año {anio}"
+
+    registros = query.all()
+    if not registros:
+        raise HTTPException(status_code=404, detail=f"No se encontraron registros de KPI {filtro_texto}")
+
+    registro_ids = [r.id for r in registros]
+    db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).delete(synchronize_session=False)
+    eliminados = db.query(RegistroPicking).filter(RegistroPicking.id.in_(registro_ids)).delete(synchronize_session=False)
+    db.commit()
+
+    return {
+        "mensaje": f"Se eliminaron {eliminados} registros de KPI {filtro_texto}",
+        "elementos_eliminados": eliminados,
+        "filtro": filtro_texto
     }
 
 # ==========================================

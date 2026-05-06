@@ -23,6 +23,12 @@ export default function PanelAdmin({ token, rol, nombre }) {
   // Estados del Dashboard
   const [datosKpi, setDatosKpi] = useState(null);
   const [cargandoKpis, setCargandoKpis] = useState(false);
+  const [filtroMes, setFiltroMes] = useState('');
+  const [filtroAnio, setFiltroAnio] = useState('');
+  const [filtroInicio, setFiltroInicio] = useState('');
+  const [filtroFin, setFiltroFin] = useState('');
+  const [filtroActivo, setFiltroActivo] = useState('');
+  const [borrandoKpis, setBorrandoKpis] = useState(false);
 
   // Estados para configuración de bodega
   const [archivoUbicaciones, setArchivoUbicaciones] = useState(null);
@@ -52,9 +58,94 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const cargarKpis = async () => {
     setCargandoKpis(true);
     try {
-      const res = await fetch(`${API_URL}/api/kpis`, { headers: { 'Authorization': `Bearer ${token}` } });
+      let query = '';
+      if (filtroActivo === 'mes' && filtroMes) {
+        query = `?mes=${filtroMes}`;
+      } else if (filtroActivo === 'anio' && filtroAnio) {
+        query = `?anio=${filtroAnio}`;
+      } else if (filtroActivo === 'rango' && filtroInicio && filtroFin) {
+        query = `?inicio=${filtroInicio}&fin=${filtroFin}`;
+      }
+
+      const res = await fetch(`${API_URL}/api/kpis${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) setDatosKpi(await res.json());
-    } catch (err) { console.error(err); } finally { setCargandoKpis(false); }
+      else {
+        const data = await res.json();
+        console.error('Error al cargar KPIs:', data.detail || data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCargandoKpis(false);
+    }
+  };
+
+  const handleFiltroMesChange = (e) => {
+    setFiltroMes(e.target.value);
+    setFiltroAnio('');
+    setFiltroInicio('');
+    setFiltroFin('');
+    setFiltroActivo('mes');
+  };
+
+  const handleFiltroAnioChange = (e) => {
+    setFiltroAnio(e.target.value);
+    setFiltroMes('');
+    setFiltroInicio('');
+    setFiltroFin('');
+    setFiltroActivo('anio');
+  };
+
+  const handleFiltroInicioChange = (e) => {
+    setFiltroInicio(e.target.value);
+    setFiltroAnio('');
+    setFiltroMes('');
+    setFiltroActivo('rango');
+  };
+
+  const handleFiltroFinChange = (e) => {
+    setFiltroFin(e.target.value);
+    setFiltroAnio('');
+    setFiltroMes('');
+    setFiltroActivo('rango');
+  };
+
+  const handleBorrarKpis = async () => {
+    let query = '';
+    let label = 'todo el histórico';
+
+    if (filtroActivo === 'mes' && filtroMes) {
+      query = `?mes=${filtroMes}`;
+      label = filtroMes;
+    } else if (filtroActivo === 'anio' && filtroAnio) {
+      query = `?anio=${filtroAnio}`;
+      label = `año ${filtroAnio}`;
+    } else if (filtroActivo === 'rango' && filtroInicio && filtroFin) {
+      query = `?inicio=${filtroInicio}&fin=${filtroFin}`;
+      label = `rango ${filtroInicio} a ${filtroFin}`;
+    }
+
+    const confirmar = window.confirm(`¿Borrar registros de KPI de ${label}? Esta acción no se puede deshacer.`);
+    if (!confirmar) return;
+
+    setBorrandoKpis(true);
+    try {
+      const res = await fetch(`${API_URL}/api/kpis${query}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.mensaje);
+        cargarKpis();
+      } else {
+        alert(`Error: ${data.detail || 'No se pudo borrar'}`);
+      }
+    } catch (err) {
+      alert('Error de conexión al intentar borrar los datos.');
+    } finally {
+      setBorrandoKpis(false);
+    }
   };
 
   const cargarUsuarios = async () => {
@@ -224,9 +315,40 @@ export default function PanelAdmin({ token, rol, nombre }) {
           <div className="card-kpi">
             <h2 className="label-kpi">Total Histórico</h2>
             <p className="value-kpi">{datosKpi ? datosKpi.total_pickings_historico : '0'} <span className="text-lg text-slate-400 font-medium">Pedidos</span></p>
+            <p className="text-sm text-slate-500 mt-2">
+              {filtroActivo === 'mes' ? `Mostrando datos de ${filtroMes}` : filtroActivo === 'anio' ? `Mostrando datos del año ${filtroAnio}` : filtroActivo === 'rango' ? `Mostrando datos del rango ${filtroInicio} a ${filtroFin}` : 'Mostrando todos los datos históricos'}
+            </p>
           </div>
 
           <div className="card-kpi">
+            <div className="grid gap-4 lg:grid-cols-[auto_auto] xl:grid-cols-[auto_auto_auto] mb-6">
+              <div>
+                <label className="form-label">Filtrar por mes</label>
+                <input type="month" value={filtroMes} onChange={handleFiltroMesChange} className="form-input" />
+              </div>
+              <div>
+                <label className="form-label">Filtrar por año</label>
+                <input type="number" min="2000" max="2100" placeholder="2025" value={filtroAnio} onChange={handleFiltroAnioChange} className="form-input" />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="form-label">Desde</label>
+                  <input type="date" value={filtroInicio} onChange={handleFiltroInicioChange} className="form-input" />
+                </div>
+                <div>
+                  <label className="form-label">Hasta</label>
+                  <input type="date" value={filtroFin} onChange={handleFiltroFinChange} className="form-input" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3 items-center mb-4">
+              <button onClick={cargarKpis} className="btn-text">🔎 Aplicar filtro</button>
+              <button onClick={() => { setFiltroMes(''); setFiltroAnio(''); setFiltroInicio(''); setFiltroFin(''); setFiltroActivo(''); cargarKpis(); }} className="btn-text">🗓️ Ver todo</button>
+              <button onClick={handleBorrarKpis} className="btn-delete" disabled={borrandoKpis}>
+                {borrandoKpis ? 'Borrando...' : '🧹 Borrar filtro seleccionado'}
+              </button>
+            </div>
             <h2 className="title-card">🏆 Rendimiento por Preparador</h2>
             {cargandoKpis ? <p>Cargando...</p> : (
               <div className="grid gap-4 md:grid-cols-2">
