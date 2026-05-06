@@ -1,11 +1,13 @@
 import os
 import requests
 import pandas as pd
+import io # Importante para manejar archivos en memoria (Excel)
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from io import BytesIO
 
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query
+from fastapi.responses import StreamingResponse # Importante para enviar el Excel al frontend
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -29,7 +31,7 @@ LAUDUS_COMPANY_VAT = os.getenv("LAUDUS_COMPANY_VAT")
 app = FastAPI()
 
 # Configurar CORS para desarrollo y producción
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5173")  # 5173 es el puerto por defecto de Vite
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5173") 
 
 allowed_origins = [
     FRONTEND_URL,
@@ -47,6 +49,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # 3. CONFIGURACIÓN DE SEGURIDAD (WMS)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
 
@@ -55,6 +58,7 @@ class UsuarioNuevo(BaseModel):
     password: str
     rol: str
     nombre_completo: str
+
 class ItemPickingSchema(BaseModel):
     sku: str
     descripcion: str
@@ -88,13 +92,11 @@ def solo_admin(usuario_actual: Usuario = Depends(obtener_usuario_actual)):
         raise HTTPException(status_code=403, detail="Acceso denegado: Se requiere rol de administrador")
     return usuario_actual
 
-
 def admin_o_bodega(usuario_actual: Usuario = Depends(obtener_usuario_actual)):
     """Permite el acceso a administradores y jefes de bodega"""
     if usuario_actual.rol not in ["admin", "bodega"]:
         raise HTTPException(status_code=403, detail="Acceso denegado: Se requiere rol de administrador o jefe de bodega")
     return usuario_actual
-
 
 def construir_rango_mes(mes: str) -> tuple[datetime, datetime]:
     """Convierte YYYY-MM en un rango [inicio, fin) para filtrar registros."""
@@ -110,7 +112,6 @@ def construir_rango_mes(mes: str) -> tuple[datetime, datetime]:
         fin = datetime(year, month + 1, 1)
     return inicio, fin
 
-
 def construir_rango_anio(anio: int) -> tuple[datetime, datetime]:
     """Convierte un año en un rango completo de fechas."""
     if anio < 1900 or anio > 2100:
@@ -118,7 +119,6 @@ def construir_rango_anio(anio: int) -> tuple[datetime, datetime]:
     inicio = datetime(anio, 1, 1)
     fin = datetime(anio + 1, 1, 1)
     return inicio, fin
-
 
 def parse_fecha_str(fecha: str) -> datetime:
     """Convierte YYYY-MM-DD en datetime."""
@@ -145,18 +145,13 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         "nombre": usuario.nombre_completo, 
         "rol": usuario.rol
     }
+
 @app.post("/api/usuarios")
 def crear_usuario(nuevo_usuario: UsuarioNuevo, db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
-    """
-    Recibe los datos del frontend y crea un nuevo usuario en la base de datos.
-    Solo accesible para el administrador.
-    """
-    # 1. Verificamos si el nombre de usuario ya está registrado
     usuario_existente = db.query(Usuario).filter(Usuario.username == nuevo_usuario.username).first()
     if usuario_existente:
         raise HTTPException(status_code=400, detail="El nombre de usuario ya está en uso.")
 
-    # 2. Preparamos los datos y encriptamos la contraseña
     usuario_db = Usuario(
         username=nuevo_usuario.username,
         hashed_password=get_password_hash(nuevo_usuario.password),
@@ -164,21 +159,17 @@ def crear_usuario(nuevo_usuario: UsuarioNuevo, db: Session = Depends(get_db), ad
         nombre_completo=nuevo_usuario.nombre_completo
     )
     
-    # 3. Guardamos en la base de datos
     db.add(usuario_db)
     db.commit()
-    
     return {"mensaje": f"La cuenta de {nuevo_usuario.nombre_completo} ha sido creada con éxito."}
+
 @app.get("/api/usuarios")
 def listar_usuarios(db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
-    """Obtiene la lista de todos los usuarios registrados (Solo para administradores)"""
     usuarios = db.query(Usuario).all()
-    # Devolvemos una lista, pero excluimos las contraseñas encriptadas por seguridad
     return [{"id": u.id, "username": u.username, "nombre_completo": u.nombre_completo, "rol": u.rol} for u in usuarios]
 
 @app.post("/api/usuarios/{usuario_id}/cambiar_password")
 def cambiar_password(usuario_id: int, datos: CambiarPasswordSchema, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
-    """Permite cambiar la contraseña de un usuario. El admin puede cambiar cualquier cuenta."""
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -196,13 +187,10 @@ def cambiar_password(usuario_id: int, datos: CambiarPasswordSchema, db: Session 
 
 @app.delete("/api/usuarios/{usuario_id}")
 def eliminar_usuario(usuario_id: int, db: Session = Depends(get_db), admin: Usuario = Depends(solo_admin)):
-    """Busca un usuario por su ID y lo elimina de la base de datos"""
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
-    
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
-    # Medida de seguridad vital: Evitar auto-eliminación
     if usuario.username == admin.username:
         raise HTTPException(status_code=400, detail="Acción bloqueada: No puedes eliminar tu propia cuenta.")
         
@@ -216,18 +204,12 @@ def eliminar_usuario(usuario_id: int, db: Session = Depends(get_db), admin: Usua
 
 @app.post("/api/config/subir-ubicaciones")
 async def subir_ubicaciones(file: UploadFile = File(...), db: Session = Depends(get_db), usuario_actual: Usuario = Depends(admin_o_bodega)):
-    """
-    Permite que administradores o jefes de bodega carguen el archivo Excel con ubicaciones de productos.
-    """
     try:
-        # Validar que sea un archivo Excel
         if not file.filename.endswith(('.xlsx', '.xls')):
             raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx o .xls)")
         
-        # Leer el archivo en memoria
         contenido = await file.read()
         
-        # Verificar que se puede leer como DataFrame (validación básica)
         try:
             df_test = pd.read_excel(BytesIO(contenido), sheet_name="CODIFICACION")
             if "SKU (CODIGO)" not in df_test.columns:
@@ -238,10 +220,8 @@ async def subir_ubicaciones(file: UploadFile = File(...), db: Session = Depends(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error al leer el archivo: {str(e)}")
         
-        # Eliminar configuración anterior (mantener solo la última)
         db.query(ConfiguracionBodega).delete()
         
-        # Guardar nuevo archivo en BD
         nueva_config = ConfiguracionBodega(
             nombre_archivo=file.filename,
             archivo_excel=contenido,
@@ -263,12 +243,9 @@ async def subir_ubicaciones(file: UploadFile = File(...), db: Session = Depends(
 
 @app.get("/api/config/ubicaciones-status")
 def obtener_estado_ubicaciones(db: Session = Depends(get_db)):
-    """Devuelve información sobre el archivo de ubicaciones cargado"""
     config = db.query(ConfiguracionBodega).order_by(ConfiguracionBodega.fecha_carga.desc()).first()
-    
     if not config:
         return {"cargado": False, "mensaje": "No hay archivo de ubicaciones cargado"}
-    
     return {
         "cargado": True,
         "nombre_archivo": config.nombre_archivo,
@@ -282,7 +259,6 @@ def obtener_estado_ubicaciones(db: Session = Depends(get_db)):
 
 @app.post("/api/iniciar_picking")
 def iniciar_picking(cotizacion_id: str, preparador: str, db: Session = Depends(get_db)):
-    """Guarda la hora exacta en la que se imprimió la hoja"""
     nuevo_registro = RegistroPicking(
         cotizacion_id=cotizacion_id,
         hora_inicio=datetime.utcnow(),
@@ -295,17 +271,14 @@ def iniciar_picking(cotizacion_id: str, preparador: str, db: Session = Depends(g
 
 @app.post("/api/finalizar_picking/{registro_id}")
 def finalizar_picking(registro_id: int, datos: FinalizarPickingSchema, db: Session = Depends(get_db)):
-    """Detiene el reloj y guarda los productos preparados"""
-    from models import PrendaPicking # Importamos el nuevo modelo
+    from models import PrendaPicking 
     
     registro = db.query(RegistroPicking).filter(RegistroPicking.id == registro_id).first()
     if not registro:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
     
-    # Guardamos la hora de término
     registro.hora_fin = datetime.utcnow()
     
-    # Guardamos cada producto en la nueva tabla
     for item in datos.items:
         nueva_prenda = PrendaPicking(
             registro_id=registro.id,
@@ -325,12 +298,14 @@ def obtener_kpis(
     mes: str | None = Query(None, regex=r'^\d{4}-\d{2}$'),
     anio: int | None = Query(None, ge=1900, le=2100),
     inicio: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$'),
-    fin: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$')
+    fin: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$'),
+    preparador: str | None = Query(None) # Parámetro para filtrar por usuario
 ):
-    from models import PrendaPicking # Importamos el modelo
+    from models import PrendaPicking 
     
     query = db.query(RegistroPicking).filter(RegistroPicking.hora_fin.isnot(None))
 
+    # Filtros de fecha
     if inicio or fin:
         if not inicio or not fin:
             raise HTTPException(status_code=400, detail="Debes proporcionar inicio y fin para el rango de fechas")
@@ -346,13 +321,27 @@ def obtener_kpis(
         inicio_dt, fin_dt = construir_rango_anio(anio)
         query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
 
+    # Filtro por preparador
+    if preparador:
+        query = query.filter(RegistroPicking.nombre_preparador == preparador)
+
     registros = query.all()
     kpis_preparadores = {}
+    detalle_pickings = [] # Lista para el registro exacto de cada cotización
     
     for r in registros:
         tiempo_segundos = (r.hora_fin - r.hora_inicio).total_seconds()
         minutos = tiempo_segundos / 60.0
         nombre = r.nombre_preparador
+        
+        # Guardamos el detalle de esta cotización específica
+        detalle_pickings.append({
+            "cotizacion_id": r.cotizacion_id,
+            "preparador": nombre,
+            "fecha": r.hora_fin.strftime("%Y-%m-%d %H:%M"),
+            "duracion_minutos": round(minutos, 2)
+        })
+
         if nombre not in kpis_preparadores:
             kpis_preparadores[nombre] = {"total_pedidos": 0, "tiempo_total": 0}
         kpis_preparadores[nombre]["total_pedidos"] += 1
@@ -362,30 +351,113 @@ def obtener_kpis(
     for nombre, datos in kpis_preparadores.items():
         promedio = datos["tiempo_total"] / datos["total_pedidos"]
         resultados.append({
-            "nombre": nombre, "total_pedidos": datos["total_pedidos"], "tiempo_promedio_minutos": round(promedio, 2)
+            "nombre": nombre, 
+            "total_pedidos": datos["total_pedidos"], 
+            "tiempo_promedio_minutos": round(promedio, 2)
         })
     resultados = sorted(resultados, key=lambda x: x["tiempo_promedio_minutos"])
 
-    # --- NUEVA LÍNEA: LÓGICA DE PRENDAS MÁS VENDIDAS (FILTRADAS POR PERÍODO) ---
+    # Lógica de prendas procesadas
     registro_ids = [r.id for r in registros]
     prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
+    
     conteo_prendas = {}
+    total_prendas_sum = 0 # Acumulador del total de prendas
+
     for p in prendas_db:
-        # Usamos el SKU y nombre como identificador único
         clave = f"{p.sku} | {p.descripcion}" 
         conteo_prendas[clave] = conteo_prendas.get(clave, 0) + p.cantidad
+        total_prendas_sum += p.cantidad
 
-    # Ordenamos de mayor a menor y tomamos el Top 5
-    top_prendas = sorted(
+    # Ordenamos todas las prendas de mayor a menor cantidad
+    todas_prendas = sorted(
         [{"nombre": k.split(" | ")[1], "sku": k.split(" | ")[0], "cantidad": v} for k, v in conteo_prendas.items()],
         key=lambda x: x["cantidad"], reverse=True
-    )[:5]
+    )
+
+    top_prendas = todas_prendas[:5]
 
     return {
         "total_pickings_historico": len(registros),
+        "total_prendas_historico": total_prendas_sum,
         "estadisticas_preparadores": resultados,
-        "top_prendas": top_prendas # Lo enviamos a React
+        "top_prendas": top_prendas,
+        "todas_prendas": todas_prendas,
+        "detalle_pickings": detalle_pickings
     }
+
+# ==========================================
+# NUEVO: RUTA PARA EXPORTAR A EXCEL
+# ==========================================
+@app.get("/api/kpis/exportar")
+def exportar_kpis_excel(
+    db: Session = Depends(get_db),
+    admin: Usuario = Depends(solo_admin),
+    mes: str | None = Query(None, regex=r'^\d{4}-\d{2}$'),
+    anio: int | None = Query(None, ge=1900, le=2100),
+    inicio: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$'),
+    fin: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$'),
+    preparador: str | None = Query(None)
+):
+    """Genera un archivo Excel con el detalle de todos los pickings y prendas procesadas."""
+    from models import PrendaPicking
+    
+    query = db.query(RegistroPicking).filter(RegistroPicking.hora_fin.isnot(None))
+
+    if inicio or fin:
+        inicio_dt = parse_fecha_str(inicio)
+        fin_dt = parse_fecha_str(fin) + timedelta(days=1)
+        query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
+    elif mes:
+        inicio_dt, fin_dt = construir_rango_mes(mes)
+        query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
+    elif anio:
+        inicio_dt, fin_dt = construir_rango_anio(anio)
+        query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
+
+    if preparador:
+        query = query.filter(RegistroPicking.nombre_preparador == preparador)
+
+    registros = query.all()
+    registro_ids = [r.id for r in registros]
+    prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
+
+    # Hoja 1: Registro de Tiempos
+    datos_tiempos = []
+    for r in registros:
+        minutos = (r.hora_fin - r.hora_inicio).total_seconds() / 60.0
+        datos_tiempos.append({
+            "Cotización ID": r.cotizacion_id,
+            "Preparador": r.nombre_preparador,
+            "Fecha Inicio": r.hora_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+            "Fecha Fin": r.hora_fin.strftime("%Y-%m-%d %H:%M:%S"),
+            "Tiempo Invertido (Minutos)": round(minutos, 2)
+        })
+
+    # Hoja 2: Resumen de Prendas Procesadas
+    conteo_prendas = {}
+    for p in prendas_db:
+        clave = (p.sku, p.descripcion)
+        conteo_prendas[clave] = conteo_prendas.get(clave, 0) + p.cantidad
+        
+    datos_prendas = [{"SKU": k[0], "Descripción": k[1], "Cantidad Total": v} for k, v in conteo_prendas.items()]
+
+    # Crear el archivo Excel en memoria usando Pandas y Openpyxl
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df_tiempos = pd.DataFrame(datos_tiempos)
+        df_tiempos.to_excel(writer, index=False, sheet_name='Tiempos por Cotización')
+        
+        df_prendas = pd.DataFrame(datos_prendas)
+        df_prendas.to_excel(writer, index=False, sheet_name='Prendas Procesadas')
+        
+    buffer.seek(0)
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=reporte_picking_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+    )
 
 @app.delete("/api/kpis")
 def borrar_kpis(
@@ -439,7 +511,6 @@ def borrar_kpis(
 # ==========================================
 
 def obtener_token_laudus():
-    """Función de ayuda para iniciar sesión en Laudus y obtener el Token de la sesión"""
     url_login = f"{LAUDUS_API_URL}/security/login"
     payload = {
         "userName": LAUDUS_USER,
@@ -453,15 +524,9 @@ def obtener_token_laudus():
     
     return res.json().get("token")
 
-# ==========================================
-# RUTA PRINCIPAL: LAUDUS + EXCEL (VERSIÓN CORREGIDA)
-# ==========================================
-
 @app.get("/api/generar_picking/{cotizacion_id}")
 def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
-    """Busca la cotización en Laudus y cruza los datos con la hoja CODIFICACION cargada en BD"""
     try:
-        # 0. Verificar que existe archivo de ubicaciones
         config = db.query(ConfiguracionBodega).order_by(ConfiguracionBodega.fecha_carga.desc()).first()
         if not config:
             raise HTTPException(
@@ -469,10 +534,8 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
                 detail="No hay archivo de ubicaciones cargado. El administrador debe subir el archivo Excel primero."
             )
         
-        # 1. Autenticación y obtención del token de Laudus
         token_laudus = obtener_token_laudus()
         
-        # 2. Consultar la Cotización (Ruta corregida a /sales/quotes/)
         url_cotizacion = f"{LAUDUS_API_URL}/sales/quotes/{cotizacion_id}"
         headers = {
             "Authorization": f"Bearer {token_laudus}", 
@@ -485,23 +548,15 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="No se encontró la cotización en Laudus.")
 
         datos_laudus = respuesta_laudus.json()
-        
-        # Obtenemos los items de forma segura como en tu código original
         items_cotizacion = datos_laudus.get("items") or []
 
         if not items_cotizacion:
-            raise HTTPException(
-                status_code=400, 
-                detail="Esta cotización existe, pero no tiene productos agregados."
-            )
+            raise HTTPException(status_code=400, detail="Esta cotización existe, pero no tiene productos agregados.")
 
-        # 3. Procesar los Productos
         productos_solicitados = []
         for item in items_cotizacion:
             producto_info = item.get("product") or {}
             sku_original = str(producto_info.get("sku", "")).strip()
-            
-            # Limpiamos ceros
             sku_limpio = sku_original.lstrip("0") 
             
             productos_solicitados.append({
@@ -511,18 +566,14 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
                 "PRECIO": round(item.get("unitPrice", 0) * 1.19)
             })
 
-        # 4. Cruce con el Archivo Excel desde BD (AHORA DESDE BASE DE DATOS)
         df_ubicaciones = pd.read_excel(BytesIO(config.archivo_excel), sheet_name="CODIFICACION")
         df_pedidos = pd.DataFrame(productos_solicitados)
         
-        # Limpieza de SKUs en el Excel igual que en tu código original
         df_ubicaciones["SKU (CODIGO)"] = df_ubicaciones["SKU (CODIGO)"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.lstrip("0")
         
-        # Cruce de datos
         ruta_final = pd.merge(df_pedidos, df_ubicaciones, on="SKU (CODIGO)", how="left")
         ruta_final = ruta_final.fillna("SIN UBICACIÓN")
 
-        # Normalizar ubicación para el frontend
         if "UBICACION" not in ruta_final.columns and all(col in ruta_final.columns for col in ['PASILLO', 'HILERA', 'ESTAND']):
             ruta_final['UBICACION'] = ruta_final.apply(
                 lambda row: f"P{row['PASILLO']} - H{row['HILERA']} - E{row['ESTAND']}", axis=1
@@ -530,21 +581,16 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
         elif "UBICACIÓN" in ruta_final.columns and "UBICACION" not in ruta_final.columns:
             ruta_final['UBICACION'] = ruta_final['UBICACIÓN']
 
-        # Ordenamiento de la ruta
         if all(col in ruta_final.columns for col in ['PASILLO', 'HILERA', 'ESTAND']):
             ruta_final['PASILLO'] = ruta_final['PASILLO'].astype(str)
             ruta_final['HILERA'] = ruta_final['HILERA'].astype(str)
             ruta_final['ESTAND'] = ruta_final['ESTAND'].astype(str)
             ruta_ordenada = ruta_final.sort_values(by=['PASILLO', 'HILERA', 'ESTAND'])
         else:
-            # Si por algún motivo las columnas no existen, no ordenamos para evitar errores
             ruta_ordenada = ruta_final
 
-        # Convertimos a diccionario
         hoja_ruta = ruta_ordenada.to_dict(orient="records")
 
-        # 5. Respuesta Final para React (Llaves corregidas)
-        # Usamos .get() de forma encadenada por si alguna cotización no tiene vendedor asignado
         return {
             "cotizacion_id": cotizacion_id,
             "cliente": datos_laudus.get("customer", {}).get("name", "Cliente Desconocido"),

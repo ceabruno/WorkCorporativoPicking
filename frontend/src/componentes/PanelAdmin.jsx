@@ -7,12 +7,11 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const esAdmin = rol === 'admin';
   const [pestanaActiva, setPestanaActiva] = useState(esAdmin ? 'dashboard' : 'bodega');
   
-  // Aseguramos que un rol sin permisos vea directamente la pestaña de bodega
   useEffect(() => {
     if (!esAdmin) setPestanaActiva('bodega');
   }, [esAdmin]);
   
-  // Estados para creación
+  // Estados para creación de usuarios
   const [formData, setFormData] = useState({ username: '', password: '', nombre_completo: '', rol: 'preparador' });
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
   const [creandoUsuario, setCreandoUsuario] = useState(false);
@@ -21,7 +20,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const [listaUsuarios, setListaUsuarios] = useState([]);
   const [cargandoUsuarios, setCargandoUsuarios] = useState(false);
 
-  // Estados del Dashboard
+  // Estados del Dashboard y Filtros
   const [datosKpi, setDatosKpi] = useState(null);
   const [cargandoKpis, setCargandoKpis] = useState(false);
   const [filtroMes, setFiltroMes] = useState('');
@@ -30,6 +29,15 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const [filtroFin, setFiltroFin] = useState('');
   const [filtroActivo, setFiltroActivo] = useState('');
   const [borrandoKpis, setBorrandoKpis] = useState(false);
+  
+  // NUEVOS: Estados para filtros avanzados y descargas
+  const [filtroPreparador, setFiltroPreparador] = useState('');
+  const [descargandoExcel, setDescargandoExcel] = useState(false);
+  
+  // NUEVOS: Estados de Paginación
+  const [paginaDetalle, setPaginaDetalle] = useState(1);
+  const [paginaPrendas, setPaginaPrendas] = useState(1);
+  const itemsPorPagina = 10;
 
   // Estados para configuración de bodega
   const [archivoUbicaciones, setArchivoUbicaciones] = useState(null);
@@ -49,26 +57,37 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const [cargandoCotizacion, setCargandoCotizacion] = useState(false);
   const [errorCotizacion, setErrorCotizacion] = useState('');
 
+  // Cargar datos principales al iniciar
   useEffect(() => { 
     if (pestanaActiva === 'dashboard') cargarKpis(); 
-    if (pestanaActiva === 'usuarios' && esAdmin) cargarUsuarios();
     if (pestanaActiva === 'bodega') verificarEstadoArchivo();
+    // Cargamos usuarios siempre que sea admin para poder usarlos en el filtro del dashboard
+    if (esAdmin) cargarUsuarios();
   }, [pestanaActiva, esAdmin]);
 
   // --- FUNCIONES DEL BACKEND ---
   const cargarKpis = async () => {
     setCargandoKpis(true);
-    try {
-      let query = '';
-      if (filtroActivo === 'mes' && filtroMes) {
-        query = `?mes=${filtroMes}`;
-      } else if (filtroActivo === 'anio' && filtroAnio) {
-        query = `?anio=${filtroAnio}`;
-      } else if (filtroActivo === 'rango' && filtroInicio && filtroFin) {
-        query = `?inicio=${filtroInicio}&fin=${filtroFin}`;
-      }
+    // Reiniciamos las páginas al aplicar un nuevo filtro
+    setPaginaDetalle(1);
+    setPaginaPrendas(1);
 
-      const res = await fetch(`${API_URL}/api/kpis${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
+    try {
+      let queryParams = new URLSearchParams();
+      
+      if (filtroActivo === 'mes' && filtroMes) queryParams.append('mes', filtroMes);
+      else if (filtroActivo === 'anio' && filtroAnio) queryParams.append('anio', filtroAnio);
+      else if (filtroActivo === 'rango' && filtroInicio && filtroFin) {
+        queryParams.append('inicio', filtroInicio);
+        queryParams.append('fin', filtroFin);
+      }
+      
+      // Añadimos el filtro por preparador a la petición
+      if (filtroPreparador) queryParams.append('preparador', filtroPreparador);
+
+      const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+      const res = await fetch(`${API_URL}/api/kpis${queryString}`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) setDatosKpi(await res.json());
       else {
         const data = await res.json();
@@ -78,6 +97,46 @@ export default function PanelAdmin({ token, rol, nombre }) {
       console.error(err);
     } finally {
       setCargandoKpis(false);
+    }
+  };
+
+  const handleDescargarExcel = async () => {
+    setDescargandoExcel(true);
+    try {
+      let queryParams = new URLSearchParams();
+      if (filtroActivo === 'mes' && filtroMes) queryParams.append('mes', filtroMes);
+      else if (filtroActivo === 'anio' && filtroAnio) queryParams.append('anio', filtroAnio);
+      else if (filtroActivo === 'rango' && filtroInicio && filtroFin) {
+        queryParams.append('inicio', filtroInicio);
+        queryParams.append('fin', filtroFin);
+      }
+      if (filtroPreparador) queryParams.append('preparador', filtroPreparador);
+
+      const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+      
+      // Hacemos la petición pidiendo un Blob (archivo binario)
+      const res = await fetch(`${API_URL}/api/kpis/exportar${queryString}`, { 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      });
+      
+      if (res.ok) {
+        // Creamos un link invisible en el navegador para forzar la descarga
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `reporte_picking_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        alert("Error al generar el documento Excel.");
+      }
+    } catch (err) {
+      alert("Error de conexión al intentar descargar.");
+    } finally {
+      setDescargandoExcel(false);
     }
   };
 
@@ -97,20 +156,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
     setFiltroActivo('anio');
   };
 
-  const handleFiltroInicioChange = (e) => {
-    setFiltroInicio(e.target.value);
-    setFiltroAnio('');
-    setFiltroMes('');
-    setFiltroActivo('rango');
-  };
-
-  const handleFiltroFinChange = (e) => {
-    setFiltroFin(e.target.value);
-    setFiltroAnio('');
-    setFiltroMes('');
-    setFiltroActivo('rango');
-  };
-
   const handleBorrarKpis = async () => {
     let query = '';
     let label = 'todo el histórico';
@@ -121,9 +166,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
     } else if (filtroActivo === 'anio' && filtroAnio) {
       query = `?anio=${filtroAnio}`;
       label = `año ${filtroAnio}`;
-    } else if (filtroActivo === 'rango' && filtroInicio && filtroFin) {
-      query = `?inicio=${filtroInicio}&fin=${filtroFin}`;
-      label = `rango ${filtroInicio} a ${filtroFin}`;
     }
 
     const confirmar = window.confirm(`¿Borrar registros de KPI de ${label}? Esta acción no se puede deshacer.`);
@@ -178,23 +220,17 @@ export default function PanelAdmin({ token, rol, nombre }) {
   };
 
   const handleEliminarUsuario = async (id, nombre) => {
-    if (!window.confirm(`¿Estás completamente seguro de que deseas eliminar a ${nombre}? Esta acción no se puede deshacer.`)) {
-      return;
-    }
-    
+    if (!window.confirm(`¿Estás seguro de eliminar a ${nombre}?`)) return;
     try {
       const res = await fetch(`${API_URL}/api/usuarios/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      
       if (res.ok) {
         alert(data.mensaje);
         cargarUsuarios(); 
-      } else {
-        alert(`Error: ${data.detail}`);
-      }
+      } else alert(`Error: ${data.detail}`);
     } catch (err) {
       alert("Error de conexión al intentar eliminar el usuario.");
     }
@@ -207,19 +243,12 @@ export default function PanelAdmin({ token, rol, nombre }) {
     try {
       const res = await fetch(`${API_URL}/api/usuarios/${usuario.id}/cambiar_password`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ nueva_password: nuevaPassword })
       });
       const data = await res.json();
-
-      if (res.ok) {
-        alert('Contraseña actualizada correctamente');
-      } else {
-        alert(`Error: ${data.detail}`);
-      }
+      if (res.ok) alert('Contraseña actualizada correctamente');
+      else alert(`Error: ${data.detail}`);
     } catch (err) {
       alert('Error de conexión al cambiar la contraseña.');
     }
@@ -231,14 +260,12 @@ export default function PanelAdmin({ token, rol, nombre }) {
       const data = await res.json();
       setEstadoUbicaciones(data);
     } catch (error) {
-      console.error("Error al verificar estado:", error);
       setEstadoUbicaciones({ cargado: false, mensaje: "Error al conectar con el servidor" });
     }
   };
 
   const handleSubirArchivo = async (e) => {
     e.preventDefault();
-    
     if (!archivoUbicaciones) {
       alert("Por favor selecciona un archivo Excel");
       return;
@@ -251,9 +278,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
     try {
       const res = await fetch(`${API_URL}/api/config/subir-ubicaciones`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
 
@@ -263,7 +288,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
         alert('Archivo de ubicaciones cargado correctamente');
         setArchivoUbicaciones(null);
         verificarEstadoArchivo();
-        // Limpiar el input del archivo
         document.getElementById('input-archivo-ubicaciones').value = '';
       } else {
         alert(`Error: ${data.detail}`);
@@ -296,6 +320,17 @@ export default function PanelAdmin({ token, rol, nombre }) {
     }
   };
 
+  // --- LÓGICA DE PAGINACIÓN ---
+  const indexUltimoDetalle = paginaDetalle * itemsPorPagina;
+  const indexPrimerDetalle = indexUltimoDetalle - itemsPorPagina;
+  const detallesPaginados = datosKpi?.detalle_pickings?.slice(indexPrimerDetalle, indexUltimoDetalle) || [];
+  const totalPaginasDetalle = Math.ceil((datosKpi?.detalle_pickings?.length || 0) / itemsPorPagina);
+
+  const indexUltimaPrenda = paginaPrendas * itemsPorPagina;
+  const indexPrimeraPrenda = indexUltimaPrenda - itemsPorPagina;
+  const prendasPaginadas = datosKpi?.todas_prendas?.slice(indexPrimeraPrenda, indexUltimaPrenda) || [];
+  const totalPaginasPrendas = Math.ceil((datosKpi?.todas_prendas?.length || 0) / itemsPorPagina);
+
   // --- INTERFAZ VISUAL ---
   return (
     <div className="page-bg admin-container">
@@ -313,44 +348,62 @@ export default function PanelAdmin({ token, rol, nombre }) {
       {/* VISTA 1: DASHBOARD */}
       {pestanaActiva === 'dashboard' && (
         <div className="space-y-6 animate-fade-up">
-          <div className="card-kpi">
-            <h2 className="label-kpi">Total Histórico</h2>
-            <p className="value-kpi">{datosKpi ? datosKpi.total_pickings_historico : '0'} <span className="text-lg text-slate-400 font-medium">Pedidos</span></p>
-            <p className="text-sm text-slate-500 mt-2">
-              {filtroActivo === 'mes' ? `Mostrando datos de ${filtroMes}` : filtroActivo === 'anio' ? `Mostrando datos del año ${filtroAnio}` : filtroActivo === 'rango' ? `Mostrando datos del rango ${filtroInicio} a ${filtroFin}` : 'Mostrando todos los datos históricos'}
-            </p>
+          
+          {/* Tarjetas de Resumen General */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="card-kpi">
+              <h2 className="label-kpi">Total Pedidos Procesados</h2>
+              <p className="value-kpi">{datosKpi ? datosKpi.total_pickings_historico : '0'} <span className="text-lg text-slate-400 font-medium">Pedidos</span></p>
+            </div>
+            <div className="card-kpi">
+              <h2 className="label-kpi">Total Prendas Procesadas</h2>
+              <p className="value-kpi">{datosKpi ? datosKpi.total_prendas_historico : '0'} <span className="text-lg text-slate-400 font-medium">Unds</span></p>
+            </div>
           </div>
 
+          {/* Panel de Filtros y Exportación */}
           <div className="card-kpi">
-            <div className="grid gap-4 lg:grid-cols-[auto_auto] xl:grid-cols-[auto_auto_auto] mb-6">
+            <div className="grid gap-4 lg:grid-cols-4 mb-6 items-end">
+              <div>
+                <label className="form-label">Filtrar por Preparador</label>
+                <select 
+                  className="form-input" 
+                  value={filtroPreparador} 
+                  onChange={(e) => setFiltroPreparador(e.target.value)}
+                >
+                  <option value="">Todos los usuarios</option>
+                  {/* Extraemos nombres de la lista de usuarios */}
+                  {listaUsuarios.filter(u => u.rol === 'preparador').map(u => (
+                    <option key={u.id} value={u.nombre_completo}>{u.nombre_completo}</option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="form-label">Filtrar por mes</label>
                 <input type="month" value={filtroMes} onChange={handleFiltroMesChange} className="form-input" />
               </div>
               <div>
                 <label className="form-label">Filtrar por año</label>
-                <input type="number" min="2000" max="2100" placeholder="2025" value={filtroAnio} onChange={handleFiltroAnioChange} className="form-input" />
+                <input type="number" min="2000" max="2100" placeholder="Ej: 2026" value={filtroAnio} onChange={handleFiltroAnioChange} className="form-input" />
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <label className="form-label">Desde</label>
-                  <input type="date" value={filtroInicio} onChange={handleFiltroInicioChange} className="form-input" />
-                </div>
-                <div>
-                  <label className="form-label">Hasta</label>
-                  <input type="date" value={filtroFin} onChange={handleFiltroFinChange} className="form-input" />
-                </div>
+              <div className="flex gap-2">
+                 <button onClick={cargarKpis} className="btn-primary w-full"><IconFilter size={16} className="inline mr-1" /> Filtrar</button>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3 items-center mb-4">
-              <button onClick={cargarKpis} className="btn-text"><IconFilter size={16} className="inline" /> Aplicar</button>
-              <button onClick={() => { setFiltroMes(''); setFiltroAnio(''); setFiltroInicio(''); setFiltroFin(''); setFiltroActivo(''); cargarKpis(); }} className="btn-text">Ver todo</button>
-              <button onClick={handleBorrarKpis} className="btn-delete" disabled={borrandoKpis}>
-                <IconTrash size={14} className="inline" /> {borrandoKpis ? 'Borrando...' : 'Borrar'}
+            <div className="flex flex-wrap gap-3 items-center pt-4 border-t border-slate-100">
+              <button onClick={() => { setFiltroMes(''); setFiltroAnio(''); setFiltroInicio(''); setFiltroFin(''); setFiltroActivo(''); setFiltroPreparador(''); cargarKpis(); }} className="btn-secondary">Limpiar Filtros</button>
+              <button onClick={handleDescargarExcel} disabled={descargandoExcel} className="btn-success">
+                {descargandoExcel ? 'Generando Excel...' : 'Exportar a Excel'}
+              </button>
+              <button onClick={handleBorrarKpis} className="btn-delete ml-auto" disabled={borrandoKpis}>
+                <IconTrash size={14} className="inline mr-1" /> {borrandoKpis ? 'Borrando...' : 'Borrar KPI Actuales'}
               </button>
             </div>
-            <h2 className="title-card">Rendimiento por Preparador</h2>
+          </div>
+
+          <div className="card-kpi">
+            <h2 className="title-card">Rendimiento por Preparador (Tiempos Promedio)</h2>
             {cargandoKpis ? <p>Cargando...</p> : (
               <div className="grid gap-4 md:grid-cols-2">
                 {datosKpi?.estadisticas_preparadores?.map((prep, i) => (
@@ -366,26 +419,65 @@ export default function PanelAdmin({ token, rol, nombre }) {
             )}
           </div>
 
-          <div className="card-kpi mt-6">
-            <h2 className="title-card">Top 5 Prendas Más Procesadas</h2>
-            {cargandoKpis ? <p>Cargando inventario...</p> : (
-              <div className="space-y-3">
-                {datosKpi?.top_prendas?.map((prenda, i) => (
-                  <div key={i} className="card-item">
-                    <div className="flex items-center gap-4">
-                      <div className="bg-graphite-dark text-white font-bold h-8 w-8 rounded-full flex items-center justify-center">#{i + 1}</div>
+          {/* Tablas de Detalles y Prendas (Paginadas) */}
+          {cargandoKpis ? <p className="text-center font-bold text-slate-500 py-8">Cargando métricas...</p> : (
+            <div className="grid gap-6 md:grid-cols-2">
+              
+              {/* Tabla 1: Tiempos por Cotización */}
+              <div className="card-kpi">
+                <h2 className="title-card">Registro de Tiempos por Cotización</h2>
+                <div className="space-y-3 mb-4">
+                  {detallesPaginados.map((item, i) => (
+                    <div key={i} className="card-item text-sm">
                       <div>
-                        <p className="font-bold text-sm">{prenda.nombre}</p>
+                        <p className="font-bold">Cot: {item.cotizacion_id}</p>
+                        <p className="text-xs text-slate-500">{item.preparador} • {item.fecha}</p>
+                      </div>
+                      <p className="font-black text-work-red">{item.duracion_minutos} min</p>
+                    </div>
+                  ))}
+                  {detallesPaginados.length === 0 && <p className="text-sm text-slate-400">No hay registros.</p>}
+                </div>
+                
+                {/* Paginador */}
+                {totalPaginasDetalle > 1 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <button onClick={() => setPaginaDetalle(p => Math.max(1, p - 1))} disabled={paginaDetalle === 1} className="btn-secondary py-1 px-3">Anterior</button>
+                    <span className="font-bold text-slate-500">Pág {paginaDetalle} de {totalPaginasDetalle}</span>
+                    <button onClick={() => setPaginaDetalle(p => Math.min(totalPaginasDetalle, p + 1))} disabled={paginaDetalle === totalPaginasDetalle} className="btn-secondary py-1 px-3">Siguiente</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Tabla 2: Registro Completo de Prendas */}
+              <div className="card-kpi">
+                <h2 className="title-card">Registro de Prendas Procesadas</h2>
+                <div className="space-y-3 mb-4">
+                  {prendasPaginadas.map((prenda, i) => (
+                    <div key={i} className="card-item text-sm">
+                      <div className="flex-1">
+                        <p className="font-bold truncate" title={prenda.nombre}>{prenda.nombre}</p>
                         <p className="text-xs text-slate-500">SKU: {prenda.sku}</p>
                       </div>
+                      <p className="font-black text-emerald-600 ml-4">{prenda.cantidad} und</p>
                     </div>
-                    <p className="text-xl font-black text-work-red">{prenda.cantidad} <span className="text-xs font-medium">unds</span></p>
+                  ))}
+                  {prendasPaginadas.length === 0 && <p className="text-sm text-slate-400">No hay registros.</p>}
+                </div>
+
+                {/* Paginador */}
+                {totalPaginasPrendas > 1 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <button onClick={() => setPaginaPrendas(p => Math.max(1, p - 1))} disabled={paginaPrendas === 1} className="btn-secondary py-1 px-3">Anterior</button>
+                    <span className="font-bold text-slate-500">Pág {paginaPrendas} de {totalPaginasPrendas}</span>
+                    <button onClick={() => setPaginaPrendas(p => Math.min(totalPaginasPrendas, p + 1))} disabled={paginaPrendas === totalPaginasPrendas} className="btn-secondary py-1 px-3">Siguiente</button>
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
-          <button onClick={cargarKpis} className="btn-text mx-auto mt-4"><IconRefresh size={16} className="inline" /> Actualizar</button>
+
+            </div>
+          )}
+
         </div>
       )}
 
@@ -429,7 +521,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
                       <p className="text-xs text-slate-500 font-mono">@{usuario.username} • {usuario.rol.toUpperCase()}</p>
                     </div>
                     
-                    {/* CONDICIÓN AÑADIDA: Solo muestra el botón si el rol NO es admin */}
                     <div className="flex gap-2">
                       {usuario.rol !== 'admin' && (
                         <button 
@@ -488,7 +579,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
                   Carga el archivo Excel con las ubicaciones de los productos. Este archivo será utilizado para mostrar la ruta de picking a los preparadores.
                 </p>
 
-                {/* Estado actual del archivo */}
                 {estadoUbicaciones && (
                   <div className={`p-4 rounded-lg mb-6 ${estadoUbicaciones.cargado ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-slate-200'}`}>
                     {estadoUbicaciones.cargado ? (
