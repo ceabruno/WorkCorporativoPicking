@@ -299,13 +299,12 @@ def obtener_kpis(
     anio: int | None = Query(None, ge=1900, le=2100),
     inicio: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$'),
     fin: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$'),
-    preparador: str | None = Query(None) # Parámetro para filtrar por usuario
+    preparador: str | None = Query(None)
 ):
     from models import PrendaPicking 
     
     query = db.query(RegistroPicking).filter(RegistroPicking.hora_fin.isnot(None))
 
-    # Filtros de fecha
     if inicio or fin:
         if not inicio or not fin:
             raise HTTPException(status_code=400, detail="Debes proporcionar inicio y fin para el rango de fechas")
@@ -321,20 +320,18 @@ def obtener_kpis(
         inicio_dt, fin_dt = construir_rango_anio(anio)
         query = query.filter(RegistroPicking.hora_fin >= inicio_dt, RegistroPicking.hora_fin < fin_dt)
 
-    # Filtro por preparador
     if preparador:
         query = query.filter(RegistroPicking.nombre_preparador == preparador)
 
     registros = query.all()
     kpis_preparadores = {}
-    detalle_pickings = [] # Lista para el registro exacto de cada cotización
+    detalle_pickings = [] 
     
     for r in registros:
         tiempo_segundos = (r.hora_fin - r.hora_inicio).total_seconds()
         minutos = tiempo_segundos / 60.0
         nombre = r.nombre_preparador
         
-        # Guardamos el detalle de esta cotización específica
         detalle_pickings.append({
             "cotizacion_id": r.cotizacion_id,
             "preparador": nombre,
@@ -357,46 +354,37 @@ def obtener_kpis(
         })
     resultados = sorted(resultados, key=lambda x: x["tiempo_promedio_minutos"])
 
-    # Lógica de prendas procesadas
+    # Lógica de prendas procesadas separadas por mes
     registro_ids = [r.id for r in registros]
     prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
     
     conteo_prendas = {}
     total_prendas_sum = 0
-    total_prendas_este_mes = 0 # NUEVA VARIABLE: Guardará lo de este mes
+    prendas_por_mes = {} # Guardaremos el total de cada mes dinámicamente
 
-    # Creamos un diccionario rápido para saber la fecha de cada registro
     fechas_registros = {r.id: r.hora_fin for r in registros}
-    hoy = datetime.utcnow()
 
     for p in prendas_db:
         clave = f"{p.sku} | {p.descripcion}" 
         conteo_prendas[clave] = conteo_prendas.get(clave, 0) + p.cantidad
-        
-        # Sumamos al gran total histórico
         total_prendas_sum += p.cantidad
 
-        # Comparamos la fecha: Si el mes y año coinciden con hoy, es de este mes
+        # Extraemos el "Año-Mes" de la fecha (Ej: "2026-05")
         fecha_fin = fechas_registros.get(p.registro_id)
-        if fecha_fin and fecha_fin.month == hoy.month and fecha_fin.year == hoy.year:
-            total_prendas_este_mes += p.cantidad
+        if fecha_fin:
+            mes_clave = fecha_fin.strftime("%Y-%m")
+            prendas_por_mes[mes_clave] = prendas_por_mes.get(mes_clave, 0) + p.cantidad
 
-    # El resto son los meses anteriores
-    total_prendas_anteriores = total_prendas_sum - total_prendas_este_mes
-
-    # Ordenamos todas las prendas de mayor a menor cantidad
     todas_prendas = sorted(
         [{"nombre": k.split(" | ")[1], "sku": k.split(" | ")[0], "cantidad": v} for k, v in conteo_prendas.items()],
         key=lambda x: x["cantidad"], reverse=True
     )
-
     top_prendas = todas_prendas[:5]
 
     return {
         "total_pickings_historico": len(registros),
         "total_prendas_historico": total_prendas_sum,
-        "total_prendas_este_mes": total_prendas_este_mes,         # NUEVO DATO ENVIADO A REACT
-        "total_prendas_anteriores": total_prendas_anteriores, # NUEVO DATO ENVIADO A REACT
+        "prendas_por_mes": prendas_por_mes, # Devolvemos el diccionario de meses
         "estadisticas_preparadores": resultados,
         "top_prendas": top_prendas,
         "todas_prendas": todas_prendas,
@@ -404,7 +392,7 @@ def obtener_kpis(
     }
 
 # ==========================================
-# NUEVO: RUTA PARA EXPORTAR A EXCEL
+# RUTA PARA EXPORTAR A EXCEL (CON DESGLOSE POR MES)
 # ==========================================
 @app.get("/api/kpis/exportar")
 def exportar_kpis_excel(
@@ -416,7 +404,6 @@ def exportar_kpis_excel(
     fin: str | None = Query(None, regex=r'^\d{4}-\d{2}-\d{2}$'),
     preparador: str | None = Query(None)
 ):
-    """Genera un archivo Excel con el detalle de todos los pickings y prendas procesadas."""
     from models import PrendaPicking
     
     query = db.query(RegistroPicking).filter(RegistroPicking.hora_fin.isnot(None))
@@ -439,10 +426,12 @@ def exportar_kpis_excel(
     registro_ids = [r.id for r in registros]
     prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
 
-    # Hoja 1: Registro de Tiempos
+    # 1. Hoja: Registro de Tiempos
     datos_tiempos = []
+    fechas_registros = {} 
     for r in registros:
         minutos = (r.hora_fin - r.hora_inicio).total_seconds() / 60.0
+        fechas_registros[r.id] = r.hora_fin
         datos_tiempos.append({
             "Cotización ID": r.cotizacion_id,
             "Preparador": r.nombre_preparador,
@@ -451,17 +440,42 @@ def exportar_kpis_excel(
             "Tiempo Invertido (Minutos)": round(minutos, 2)
         })
 
-    # Hoja 2: Resumen de Prendas Procesadas
+    # 2. Hoja: Resumen de Prendas Procesadas y Cálculo Dinámico de Meses
     conteo_prendas = {}
+    total_prendas_historico = 0
+    prendas_por_mes = {}
+
     for p in prendas_db:
         clave = (p.sku, p.descripcion)
         conteo_prendas[clave] = conteo_prendas.get(clave, 0) + p.cantidad
         
+        # Lógica global y por mes
+        total_prendas_historico += p.cantidad
+        fecha_fin = fechas_registros.get(p.registro_id)
+        if fecha_fin:
+            mes_clave = fecha_fin.strftime("%Y-%m")
+            prendas_por_mes[mes_clave] = prendas_por_mes.get(mes_clave, 0) + p.cantidad
+        
     datos_prendas = [{"SKU": k[0], "Descripción": k[1], "Cantidad Total": v} for k, v in conteo_prendas.items()]
 
-    # Crear el archivo Excel en memoria usando Pandas y Openpyxl
+    # 3. Hoja: Resumen General con desglose mensual
+    datos_resumen = [
+        {"Métrica": "Total Prendas Histórico", "Valor": total_prendas_historico}
+    ]
+
+    # Agregamos dinámicamente cada mes registrado, ordenando del más nuevo al más viejo
+    for mes_registrado in sorted(prendas_por_mes.keys(), reverse=True):
+        datos_resumen.append({
+            "Métrica": f"Prendas procesadas en {mes_registrado}", 
+            "Valor": prendas_por_mes[mes_registrado]
+        })
+
+    # Crear el archivo Excel
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df_resumen = pd.DataFrame(datos_resumen)
+        df_resumen.to_excel(writer, index=False, sheet_name='Resumen General')
+
         df_tiempos = pd.DataFrame(datos_tiempos)
         df_tiempos.to_excel(writer, index=False, sheet_name='Tiempos por Cotización')
         
