@@ -375,6 +375,13 @@ def obtener_kpis(
             mes_clave = fecha_fin.strftime("%Y-%m")
             prendas_por_mes[mes_clave] = prendas_por_mes.get(mes_clave, 0) + p.cantidad
 
+    # --- NUEVO: Restauramos el cálculo para las tarjetas de React ---
+    hoy = datetime.utcnow()
+    mes_actual_str = hoy.strftime("%Y-%m")
+    total_prendas_este_mes = prendas_por_mes.get(mes_actual_str, 0)
+    total_prendas_anteriores = total_prendas_sum - total_prendas_este_mes
+    # ----------------------------------------------------------------
+
     todas_prendas = sorted(
         [{"nombre": k.split(" | ")[1], "sku": k.split(" | ")[0], "cantidad": v} for k, v in conteo_prendas.items()],
         key=lambda x: x["cantidad"], reverse=True
@@ -384,7 +391,9 @@ def obtener_kpis(
     return {
         "total_pickings_historico": len(registros),
         "total_prendas_historico": total_prendas_sum,
-        "prendas_por_mes": prendas_por_mes, # Devolvemos el diccionario de meses
+        "total_prendas_este_mes": total_prendas_este_mes,     # Restaurado para React
+        "total_prendas_anteriores": total_prendas_anteriores, # Restaurado para React
+        "prendas_por_mes": prendas_por_mes,
         "estadisticas_preparadores": resultados,
         "top_prendas": top_prendas,
         "todas_prendas": todas_prendas,
