@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import API_URL from '../config';
+import { IconArrowLeft, IconCheck, IconPrint } from '../icons/Icons';
 
 export default function HojaDePicking({ datos, onVolver }) {
   const [pickingIniciado, setPickingIniciado] = useState(false);
@@ -30,21 +31,20 @@ export default function HojaDePicking({ datos, onVolver }) {
   return (
     <div className="page-bg p-8 print:p-0 print:bg-white">
       <div className="max-w-4xl mx-auto mb-4 flex justify-between print:hidden">
-        <button onClick={onVolver} className="btn-text">⬅ Volver</button>
+        <button onClick={onVolver} className="btn-text"><IconArrowLeft size={16} className="inline" /> Volver</button>
         <div className="flex gap-4">
           {pickingIniciado && !pickingFinalizado && (
             <button onClick={finalizarPicking} className="btn-success">
-              ✅ Finalizar
+              <IconCheck size={18} className="inline mr-2" />Finalizar
             </button>
           )}
           
-          {/* BOTÓN CORREGIDO: Ahora usa btn-disabled en lugar de btn-base */}
           <button 
             onClick={iniciarEImprimir} 
             disabled={pickingFinalizado} 
             className={pickingFinalizado ? "btn-disabled" : "btn-primary"}
           >
-            🖨️ {pickingIniciado ? 'Volver a Imprimir' : 'Imprimir'}
+            <IconPrint size={18} className="inline mr-2" />{pickingIniciado ? 'Volver a Imprimir' : 'Imprimir'}
           </button>
         </div>
       </div>

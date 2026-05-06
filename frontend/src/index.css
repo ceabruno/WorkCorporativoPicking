@@ -49,9 +49,9 @@
   .nav-badge { @apply ml-2 text-[10px] bg-slate-700 px-2 py-1 rounded-full uppercase; }
 
   /* Tarjetas y Paneles (Cards) */
-  .card-main { @apply bg-white p-8 rounded-2xl shadow-xl border border-slate-200; }
-  .card-kpi { @apply bg-white p-6 rounded-2xl shadow border border-slate-200; }
-  .card-item { @apply bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100; }
+  .card-main { @apply bg-white p-8 rounded-2xl shadow-lg border border-slate-200 hover:shadow-xl transition-shadow; }
+  .card-kpi { @apply bg-white p-6 rounded-2xl shadow-md border border-slate-200 hover:shadow-lg transition-shadow; }
+  .card-item { @apply bg-gradient-to-br from-white to-slate-50 p-4 rounded-lg border border-slate-100 flex items-center justify-between transition-all hover:border-slate-200 hover:shadow-md; }
 
   /* Títulos y Textos */
   .title-main { @apply text-3xl font-black text-graphite-dark mb-6; }
@@ -66,15 +66,14 @@
   .alert-error { @apply mb-4 p-4 rounded-xl text-sm font-bold text-center border bg-red-50 text-work-red border-red-200; }
   .alert-success { @apply mb-4 p-4 rounded-xl text-sm font-bold text-center border bg-emerald-50 text-emerald-700 border-emerald-200; }
 
-  /* Botones Interactivos (CORREGIDO) */
-  .btn-primary { @apply flex justify-center items-center font-bold py-3 px-4 rounded-xl active:scale-95 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed w-full text-white bg-work-red hover:bg-red-700 hover:shadow-lg shadow-md; }
-  .btn-dark { @apply flex justify-center items-center font-bold py-3 px-4 rounded-xl active:scale-95 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed w-full text-white bg-graphite-dark hover:bg-slate-800 hover:shadow-lg shadow-md; }
-  .btn-success { @apply flex justify-center items-center font-bold py-3 px-4 rounded-xl active:scale-95 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed text-white bg-emerald-600 hover:bg-emerald-700 hover:shadow-lg shadow-md; }
-  .btn-logout { @apply text-sm font-bold text-red-400 hover:text-red-300 transition-colors; }
-  /* NUEVA CLASE PARA BOTONES DESACTIVADOS */
-  .btn-disabled { @apply flex justify-center items-center font-bold py-3 px-4 rounded-xl text-white bg-slate-400 cursor-not-allowed shadow-none; }
-  .btn-delete { @apply bg-red-100 text-work-red hover:bg-red-200 px-3 py-1 rounded-lg font-bold text-xs transition-colors active:scale-95; }
-  .btn-text { @apply text-sm font-bold text-slate-500 hover:text-work-red transition-colors flex items-center justify-center gap-2; }
+  /* Botones Interactivos - Completo y Profesional */
+  .btn-primary { @apply flex justify-center items-center font-bold py-3 px-5 rounded-lg active:scale-95 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed w-full text-white bg-work-red hover:bg-red-700 hover:shadow-lg shadow-md; }
+  .btn-dark { @apply flex justify-center items-center font-bold py-3 px-5 rounded-lg active:scale-95 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed w-full text-white bg-graphite-dark hover:bg-slate-800 hover:shadow-lg shadow-md; }
+  .btn-success { @apply flex justify-center items-center font-bold py-3 px-5 rounded-lg active:scale-95 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed text-white bg-emerald-600 hover:bg-emerald-700 hover:shadow-lg shadow-md; }
+  .btn-secondary { @apply inline-flex justify-center items-center font-semibold py-2 px-4 rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors active:scale-95; }
+  .btn-disabled { @apply flex justify-center items-center font-bold py-3 px-5 rounded-lg text-white bg-slate-400 cursor-not-allowed shadow-none; }
+  .btn-delete { @apply inline-flex items-center font-semibold py-2 px-3 rounded-lg text-red-700 bg-red-100 hover:bg-red-200 transition-colors active:scale-95 text-sm; }
+  .btn-text { @apply text-sm font-semibold text-slate-600 hover:text-work-red transition-colors flex items-center justify-center gap-2 active:scale-95; }
   .btn-logout { @apply text-sm font-bold text-red-400 hover:text-red-300 transition-colors; }
 
   /* Pestañas (Tabs) */

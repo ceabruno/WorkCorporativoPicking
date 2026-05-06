@@ -35,7 +35,7 @@ export default function Login({ onLoginExitoso }) {
         </div>
 
         <form className="space-y-6" onSubmit={manejarLogin}>
-          {error && <div className="alert-error">🚨 {error}</div>}
+          {error && <div className="alert-error">{error}</div>}
           
           <div>
             <label className="form-label">Usuario</label>

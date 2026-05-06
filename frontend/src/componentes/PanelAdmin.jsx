@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import API_URL from '../config';
 import HojaDePicking from './HojadePicking';
+import { IconDashboard, IconUsers, IconSettings, IconFilter, IconTrash, IconRefresh, IconUpload, IconSearch, IconKey } from '../icons/Icons';
 
 export default function PanelAdmin({ token, rol, nombre }) {
   const esAdmin = rol === 'admin';
@@ -215,7 +216,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
       const data = await res.json();
 
       if (res.ok) {
-        alert('✅ Contraseña actualizada correctamente');
+        alert('Contraseña actualizada correctamente');
       } else {
         alert(`Error: ${data.detail}`);
       }
@@ -259,13 +260,13 @@ export default function PanelAdmin({ token, rol, nombre }) {
       const data = await res.json();
 
       if (res.ok) {
-        alert('✅ Archivo de ubicaciones cargado correctamente');
+        alert('Archivo de ubicaciones cargado correctamente');
         setArchivoUbicaciones(null);
         verificarEstadoArchivo();
         // Limpiar el input del archivo
         document.getElementById('input-archivo-ubicaciones').value = '';
       } else {
-        alert(`❌ Error: ${data.detail}`);
+        alert(`Error: ${data.detail}`);
       }
     } catch (error) {
       alert(`Error al subir archivo: ${error.message}`);
@@ -303,9 +304,9 @@ export default function PanelAdmin({ token, rol, nombre }) {
       <div className="mb-8 border-b border-slate-200">
         <h1 className="title-main">Centro de Administración</h1>
         <div className="flex gap-4 flex-wrap">
-          {esAdmin && <button onClick={() => setPestanaActiva('dashboard')} className={pestanaActiva === 'dashboard' ? 'tab-active' : 'tab-inactive'}>📊 Dashboard KPIs</button>}
-          {esAdmin && <button onClick={() => setPestanaActiva('usuarios')} className={pestanaActiva === 'usuarios' ? 'tab-active' : 'tab-inactive'}>👥 Cuentas de Personal</button>}
-          <button onClick={() => setPestanaActiva('bodega')} className={pestanaActiva === 'bodega' ? 'tab-active' : 'tab-inactive'}>📦 Configuración Bodega</button>
+          {esAdmin && <button onClick={() => setPestanaActiva('dashboard')} className={pestanaActiva === 'dashboard' ? 'tab-active' : 'tab-inactive'}><IconDashboard size={18} className="inline mr-2" />Dashboard</button>}
+          {esAdmin && <button onClick={() => setPestanaActiva('usuarios')} className={pestanaActiva === 'usuarios' ? 'tab-active' : 'tab-inactive'}><IconUsers size={18} className="inline mr-2" />Personal</button>}
+          <button onClick={() => setPestanaActiva('bodega')} className={pestanaActiva === 'bodega' ? 'tab-active' : 'tab-inactive'}><IconSettings size={18} className="inline mr-2" />Configuración</button>
         </div>
       </div>
 
@@ -343,18 +344,21 @@ export default function PanelAdmin({ token, rol, nombre }) {
             </div>
 
             <div className="flex flex-wrap gap-3 items-center mb-4">
-              <button onClick={cargarKpis} className="btn-text">🔎 Aplicar filtro</button>
-              <button onClick={() => { setFiltroMes(''); setFiltroAnio(''); setFiltroInicio(''); setFiltroFin(''); setFiltroActivo(''); cargarKpis(); }} className="btn-text">🗓️ Ver todo</button>
+              <button onClick={cargarKpis} className="btn-text"><IconFilter size={16} className="inline" /> Aplicar</button>
+              <button onClick={() => { setFiltroMes(''); setFiltroAnio(''); setFiltroInicio(''); setFiltroFin(''); setFiltroActivo(''); cargarKpis(); }} className="btn-text">Ver todo</button>
               <button onClick={handleBorrarKpis} className="btn-delete" disabled={borrandoKpis}>
-                {borrandoKpis ? 'Borrando...' : '🧹 Borrar filtro seleccionado'}
+                <IconTrash size={14} className="inline" /> {borrandoKpis ? 'Borrando...' : 'Borrar'}
               </button>
             </div>
-            <h2 className="title-card">🏆 Rendimiento por Preparador</h2>
+            <h2 className="title-card">Rendimiento por Preparador</h2>
             {cargandoKpis ? <p>Cargando...</p> : (
               <div className="grid gap-4 md:grid-cols-2">
                 {datosKpi?.estadisticas_preparadores?.map((prep, i) => (
                   <div key={i} className="card-item">
-                    <p className="font-bold">{i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':''}{prep.nombre}</p>
+                    <div className="flex items-start gap-3">
+                      <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">#{i + 1}</span>
+                      <p className="font-bold flex-1">{prep.nombre}</p>
+                    </div>
                     <p className={`text-xl font-black ${prep.tiempo_promedio_minutos < 15 ? 'text-emerald-500' : 'text-work-red'}`}>{prep.tiempo_promedio_minutos} min</p>
                   </div>
                 ))}
@@ -363,7 +367,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
           </div>
 
           <div className="card-kpi mt-6">
-            <h2 className="title-card">📦 Top 5 Prendas Más Procesadas</h2>
+            <h2 className="title-card">Top 5 Prendas Más Procesadas</h2>
             {cargandoKpis ? <p>Cargando inventario...</p> : (
               <div className="space-y-3">
                 {datosKpi?.top_prendas?.map((prenda, i) => (
@@ -381,7 +385,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
               </div>
             )}
           </div>
-          <button onClick={cargarKpis} className="btn-text mx-auto mt-4">🔄 Actualizar Datos</button>
+          <button onClick={cargarKpis} className="btn-text mx-auto mt-4"><IconRefresh size={16} className="inline" /> Actualizar</button>
         </div>
       )}
 
@@ -406,7 +410,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
                 </select>
               </div>
               <button type="submit" disabled={creandoUsuario} className="btn-dark mt-2">
-                {creandoUsuario ? 'Guardando...' : '➕ Crear Cuenta'}
+                {creandoUsuario ? 'Guardando...' : <>Crear Cuenta</> }
               </button>
             </form>
           </div>
@@ -432,14 +436,14 @@ export default function PanelAdmin({ token, rol, nombre }) {
                           onClick={() => handleEliminarUsuario(usuario.id, usuario.nombre_completo)}
                           className="btn-delete"
                         >
-                          🗑️ Eliminar
+                          <IconTrash size={12} className="inline mr-1" /> Eliminar
                         </button>
                       )}
                       <button 
                         onClick={() => handleCambiarPassword(usuario)}
                         className="btn-secondary"
                       >
-                        🔐 Cambiar contraseña
+                        <IconKey size={14} className="inline mr-1" /> Contraseña
                       </button>
                     </div>
                   </div>
@@ -459,7 +463,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
       {pestanaActiva === 'bodega' && (
         <div className="space-y-6 animate-fade-up">
           <div className="card-main">
-            <h2 className="title-section">📦 Gestión de Bodega</h2>
+            <h2 className="title-section">Gestión de Bodega</h2>
             
             <div className="flex flex-wrap gap-2 mt-4 mb-6">
               <button
@@ -467,14 +471,14 @@ export default function PanelAdmin({ token, rol, nombre }) {
                 className={subPestanaBodega === 'ubicaciones' ? 'tab-active' : 'tab-inactive'}
                 onClick={() => setSubPestanaBodega('ubicaciones')}
               >
-                📁 Subir Excel
+                Subir Excel
               </button>
               <button
                 type="button"
                 className={subPestanaBodega === 'cotizacion' ? 'tab-active' : 'tab-inactive'}
                 onClick={() => setSubPestanaBodega('cotizacion')}
               >
-                🔎 Consultar Cotización
+                Consultar Cotización
               </button>
             </div>
 
@@ -519,7 +523,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
                       />
                     </div>
                     {archivoUbicaciones && (
-                      <p className="text-sm text-slate-500 mt-2">📄 Archivo seleccionado: {archivoUbicaciones.name}</p>
+                      <p className="text-sm text-slate-500 mt-2">Archivo seleccionado: {archivoUbicaciones.name}</p>
                     )}
                   </div>
 
@@ -537,11 +541,11 @@ export default function PanelAdmin({ token, rol, nombre }) {
                     disabled={subiendoArchivo || !archivoUbicaciones}
                     className="btn-dark w-full"
                   >
-                    {subiendoArchivo ? '📤 Subiendo...' : '📤 Subir Archivo de Ubicaciones'}
+                    {subiendoArchivo ? 'Subiendo...' : <><IconUpload size={16} className="inline mr-1" /> Subir Archivo</> }
                   </button>
                 </form>
 
-                <button onClick={verificarEstadoArchivo} className="btn-text mx-auto mt-4">🔄 Verificar Estado</button>
+                <button onClick={verificarEstadoArchivo} className="btn-text mx-auto mt-4">Verificar Estado</button>
               </>
             )}
 
@@ -551,7 +555,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
                   <HojaDePicking datos={datosPicking} onVolver={() => setDatosPicking(null)} />
                 ) : (
                   <form onSubmit={buscarCotizacion} className="space-y-4">
-                    {errorCotizacion && <div className="alert-error">🚨 {errorCotizacion}</div>}
+                    {errorCotizacion && <div className="alert-error">{errorCotizacion}</div>}
                     <input
                       type="text"
                       required
@@ -562,7 +566,7 @@ export default function PanelAdmin({ token, rol, nombre }) {
                       className="form-input"
                     />
                     <button type="submit" disabled={cargandoCotizacion} className="btn-primary w-full">
-                      {cargandoCotizacion ? 'Consultando...' : '🔍 Buscar y Generar Ruta'}
+                      {cargandoCotizacion ? 'Consultando...' : <><IconSearch size={16} className="inline mr-1" /> Buscar</>}
                     </button>
                   </form>
                 )}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import API_URL from '../config';
-import HojaDePicking from './HojadePicking'; 
+import HojaDePicking from './HojaDePicking'; 
+import { IconSearch } from '../icons/Icons';
 
 export default function PanelPicker({ nombreUsuario }) {
   const [cotizacion, setCotizacion] = useState('');
@@ -29,13 +30,13 @@ export default function PanelPicker({ nombreUsuario }) {
       <form onSubmit={buscarCotizacion} className="card-main max-w-md w-full">
         <h2 className="title-section text-center">Buscador de Picking</h2>
         
-        {error && <div className="alert-error">🚨 {error}</div>}
+        {error && <div className="alert-error">{error}</div>}
 
         <input type="text" required placeholder="N° Cotización (Ej: 11811)" value={cotizacion} 
           onChange={(e) => setCotizacion(e.target.value)} disabled={cargando} className="form-input mb-4" />
         
         <button type="submit" disabled={cargando} className="btn-primary py-4 mt-4">
-          {cargando ? 'Consultando...' : '🔍 Buscar y Generar Ruta'}
+          {cargando ? 'Consultando...' : <><IconSearch size={18} className="inline mr-2" /> Buscar</>}
         </button>
       </form>
     </div>

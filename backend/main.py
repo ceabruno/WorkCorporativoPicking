@@ -554,5 +554,5 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
         }
 
     except Exception as e:
-        print(f"\n🚨 ERROR CRÍTICO DETECTADO: {str(e)}")
+        print(f"\n[ERROR CRÍTICO] {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
