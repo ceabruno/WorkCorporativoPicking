@@ -30,11 +30,11 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const [filtroActivo, setFiltroActivo] = useState('');
   const [borrandoKpis, setBorrandoKpis] = useState(false);
   
-  // NUEVOS: Estados para filtros avanzados y descargas
+  // Estados para filtros avanzados y descargas
   const [filtroPreparador, setFiltroPreparador] = useState('');
   const [descargandoExcel, setDescargandoExcel] = useState(false);
   
-  // NUEVOS: Estados de Paginación
+  // Estados de Paginación
   const [paginaDetalle, setPaginaDetalle] = useState(1);
   const [paginaPrendas, setPaginaPrendas] = useState(1);
   const itemsPorPagina = 10;
@@ -61,14 +61,12 @@ export default function PanelAdmin({ token, rol, nombre }) {
   useEffect(() => { 
     if (pestanaActiva === 'dashboard') cargarKpis(); 
     if (pestanaActiva === 'bodega') verificarEstadoArchivo();
-    // Cargamos usuarios siempre que sea admin para poder usarlos en el filtro del dashboard
     if (esAdmin) cargarUsuarios();
   }, [pestanaActiva, esAdmin]);
 
   // --- FUNCIONES DEL BACKEND ---
   const cargarKpis = async () => {
     setCargandoKpis(true);
-    // Reiniciamos las páginas al aplicar un nuevo filtro
     setPaginaDetalle(1);
     setPaginaPrendas(1);
 
@@ -82,7 +80,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
         queryParams.append('fin', filtroFin);
       }
       
-      // Añadimos el filtro por preparador a la petición
       if (filtroPreparador) queryParams.append('preparador', filtroPreparador);
 
       const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
@@ -114,13 +111,11 @@ export default function PanelAdmin({ token, rol, nombre }) {
 
       const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
       
-      // Hacemos la petición pidiendo un Blob (archivo binario)
       const res = await fetch(`${API_URL}/api/kpis/exportar${queryString}`, { 
         headers: { 'Authorization': `Bearer ${token}` } 
       });
       
       if (res.ok) {
-        // Creamos un link invisible en el navegador para forzar la descarga
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -372,7 +367,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
                   onChange={(e) => setFiltroPreparador(e.target.value)}
                 >
                   <option value="">Todos los usuarios</option>
-                  {/* Extraemos nombres de la lista de usuarios */}
                   {listaUsuarios.filter(u => u.rol === 'preparador').map(u => (
                     <option key={u.id} value={u.nombre_completo}>{u.nombre_completo}</option>
                   ))}
@@ -419,12 +413,12 @@ export default function PanelAdmin({ token, rol, nombre }) {
             )}
           </div>
 
-          {/* Tablas de Detalles y Prendas (Paginadas) */}
+          {/* Tablas de Detalles y Prendas (Apiladas verticalmente con flex-col) */}
           {cargandoKpis ? <p className="text-center font-bold text-slate-500 py-8">Cargando métricas...</p> : (
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="flex flex-col gap-10"> {/* <-- AQUÍ ESTÁ EL CAMBIO PRINCIPAL */}
               
               {/* Tabla 1: Tiempos por Cotización */}
-              <div className="card-kpi">
+              <div className="card-kpi w-full">
                 <h2 className="title-card">Registro de Tiempos por Cotización</h2>
                 <div className="space-y-3 mb-4">
                   {detallesPaginados.map((item, i) => (
@@ -439,18 +433,18 @@ export default function PanelAdmin({ token, rol, nombre }) {
                   {detallesPaginados.length === 0 && <p className="text-sm text-slate-400">No hay registros.</p>}
                 </div>
                 
-                {/* Paginador */}
+                {/* Paginador (con margen superior mt-6 para dar espacio) */}
                 {totalPaginasDetalle > 1 && (
-                  <div className="flex justify-between items-center text-sm">
-                    <button onClick={() => setPaginaDetalle(p => Math.max(1, p - 1))} disabled={paginaDetalle === 1} className="btn-secondary py-1 px-3">Anterior</button>
-                    <span className="font-bold text-slate-500">Pág {paginaDetalle} de {totalPaginasDetalle}</span>
-                    <button onClick={() => setPaginaDetalle(p => Math.min(totalPaginasDetalle, p + 1))} disabled={paginaDetalle === totalPaginasDetalle} className="btn-secondary py-1 px-3">Siguiente</button>
+                  <div className="flex justify-between items-center text-sm mt-6">
+                    <button onClick={() => setPaginaDetalle(p => Math.max(1, p - 1))} disabled={paginaDetalle === 1} className="btn-secondary py-2 px-4">Anterior</button>
+                    <span className="font-bold text-slate-500 bg-slate-100 py-1 px-3 rounded-full">Pág {paginaDetalle} de {totalPaginasDetalle}</span>
+                    <button onClick={() => setPaginaDetalle(p => Math.min(totalPaginasDetalle, p + 1))} disabled={paginaDetalle === totalPaginasDetalle} className="btn-secondary py-2 px-4">Siguiente</button>
                   </div>
                 )}
               </div>
 
               {/* Tabla 2: Registro Completo de Prendas */}
-              <div className="card-kpi">
+              <div className="card-kpi w-full">
                 <h2 className="title-card">Registro de Prendas Procesadas</h2>
                 <div className="space-y-3 mb-4">
                   {prendasPaginadas.map((prenda, i) => (
@@ -465,12 +459,12 @@ export default function PanelAdmin({ token, rol, nombre }) {
                   {prendasPaginadas.length === 0 && <p className="text-sm text-slate-400">No hay registros.</p>}
                 </div>
 
-                {/* Paginador */}
+                {/* Paginador (con margen superior mt-6 para dar espacio) */}
                 {totalPaginasPrendas > 1 && (
-                  <div className="flex justify-between items-center text-sm">
-                    <button onClick={() => setPaginaPrendas(p => Math.max(1, p - 1))} disabled={paginaPrendas === 1} className="btn-secondary py-1 px-3">Anterior</button>
-                    <span className="font-bold text-slate-500">Pág {paginaPrendas} de {totalPaginasPrendas}</span>
-                    <button onClick={() => setPaginaPrendas(p => Math.min(totalPaginasPrendas, p + 1))} disabled={paginaPrendas === totalPaginasPrendas} className="btn-secondary py-1 px-3">Siguiente</button>
+                  <div className="flex justify-between items-center text-sm mt-6">
+                    <button onClick={() => setPaginaPrendas(p => Math.max(1, p - 1))} disabled={paginaPrendas === 1} className="btn-secondary py-2 px-4">Anterior</button>
+                    <span className="font-bold text-slate-500 bg-slate-100 py-1 px-3 rounded-full">Pág {paginaPrendas} de {totalPaginasPrendas}</span>
+                    <button onClick={() => setPaginaPrendas(p => Math.min(totalPaginasPrendas, p + 1))} disabled={paginaPrendas === totalPaginasPrendas} className="btn-secondary py-2 px-4">Siguiente</button>
                   </div>
                 )}
               </div>
