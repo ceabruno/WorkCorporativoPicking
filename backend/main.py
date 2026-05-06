@@ -324,43 +324,59 @@ def obtener_kpis(
         query = query.filter(RegistroPicking.nombre_preparador == preparador)
 
     registros = query.all()
+    registro_ids = [r.id for r in registros]
+    prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
+
+    # 1. Mapear rápidamente cuántas prendas tiene cada registro de picking
+    prendas_por_registro = {}
+    for p in prendas_db:
+        prendas_por_registro[p.registro_id] = prendas_por_registro.get(p.registro_id, 0) + p.cantidad
+
     kpis_preparadores = {}
     detalle_pickings = [] 
     
+    # 2. Asignar los datos y tiempos a cada preparador
     for r in registros:
         tiempo_segundos = (r.hora_fin - r.hora_inicio).total_seconds()
         minutos = tiempo_segundos / 60.0
         nombre = r.nombre_preparador
+        prendas_procesadas = prendas_por_registro.get(r.id, 0) # Obtenemos las prendas de este picking
         
         detalle_pickings.append({
             "cotizacion_id": r.cotizacion_id,
             "preparador": nombre,
             "fecha": r.hora_fin.strftime("%Y-%m-%d %H:%M"),
-            "duracion_minutos": round(minutos, 2)
+            "duracion_minutos": round(minutos, 2),
+            "prendas": prendas_procesadas
         })
 
         if nombre not in kpis_preparadores:
-            kpis_preparadores[nombre] = {"total_pedidos": 0, "tiempo_total": 0}
+            # Inicializamos el diccionario del usuario si no existe
+            kpis_preparadores[nombre] = {"total_pedidos": 0, "tiempo_total": 0, "total_prendas": 0}
+            
         kpis_preparadores[nombre]["total_pedidos"] += 1
         kpis_preparadores[nombre]["tiempo_total"] += minutos
+        kpis_preparadores[nombre]["total_prendas"] += prendas_procesadas
 
+    # 3. Calcular los promedios finales asegurando no dividir por cero
     resultados = []
     for nombre, datos in kpis_preparadores.items():
-        promedio = datos["tiempo_total"] / datos["total_pedidos"]
+        promedio_pedido = datos["tiempo_total"] / datos["total_pedidos"] if datos["total_pedidos"] > 0 else 0
+        promedio_prenda = datos["tiempo_total"] / datos["total_prendas"] if datos["total_prendas"] > 0 else 0
+        
         resultados.append({
             "nombre": nombre, 
             "total_pedidos": datos["total_pedidos"], 
-            "tiempo_promedio_minutos": round(promedio, 2)
+            "total_prendas": datos["total_prendas"],
+            "tiempo_promedio_minutos": round(promedio_pedido, 2),
+            "tiempo_promedio_por_prenda": round(promedio_prenda, 2)
         })
     resultados = sorted(resultados, key=lambda x: x["tiempo_promedio_minutos"])
 
-    # Lógica de prendas procesadas separadas por mes
-    registro_ids = [r.id for r in registros]
-    prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
-    
+    # 4. Lógica de resumen global (Histórico y por Meses)
     conteo_prendas = {}
     total_prendas_sum = 0
-    prendas_por_mes = {} # Guardaremos el total de cada mes dinámicamente
+    prendas_por_mes = {} 
 
     fechas_registros = {r.id: r.hora_fin for r in registros}
 
@@ -369,18 +385,15 @@ def obtener_kpis(
         conteo_prendas[clave] = conteo_prendas.get(clave, 0) + p.cantidad
         total_prendas_sum += p.cantidad
 
-        # Extraemos el "Año-Mes" de la fecha (Ej: "2026-05")
         fecha_fin = fechas_registros.get(p.registro_id)
         if fecha_fin:
             mes_clave = fecha_fin.strftime("%Y-%m")
             prendas_por_mes[mes_clave] = prendas_por_mes.get(mes_clave, 0) + p.cantidad
 
-    # --- NUEVO: Restauramos el cálculo para las tarjetas de React ---
     hoy = datetime.utcnow()
     mes_actual_str = hoy.strftime("%Y-%m")
     total_prendas_este_mes = prendas_por_mes.get(mes_actual_str, 0)
     total_prendas_anteriores = total_prendas_sum - total_prendas_este_mes
-    # ----------------------------------------------------------------
 
     todas_prendas = sorted(
         [{"nombre": k.split(" | ")[1], "sku": k.split(" | ")[0], "cantidad": v} for k, v in conteo_prendas.items()],
@@ -391,8 +404,8 @@ def obtener_kpis(
     return {
         "total_pickings_historico": len(registros),
         "total_prendas_historico": total_prendas_sum,
-        "total_prendas_este_mes": total_prendas_este_mes,     # Restaurado para React
-        "total_prendas_anteriores": total_prendas_anteriores, # Restaurado para React
+        "total_prendas_este_mes": total_prendas_este_mes,     
+        "total_prendas_anteriores": total_prendas_anteriores, 
         "prendas_por_mes": prendas_por_mes,
         "estadisticas_preparadores": resultados,
         "top_prendas": top_prendas,

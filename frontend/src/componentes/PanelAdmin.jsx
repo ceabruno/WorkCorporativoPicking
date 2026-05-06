@@ -20,14 +20,13 @@ export default function PanelAdmin({ token, rol, nombre }) {
   const [listaUsuarios, setListaUsuarios] = useState([]);
   const [cargandoUsuarios, setCargandoUsuarios] = useState(false);
 
-  // Estados del Dashboard y Filtros (Simplificados a Desde-Hasta)
+  // Estados del Dashboard y Filtros
   const [datosKpi, setDatosKpi] = useState(null);
   const [cargandoKpis, setCargandoKpis] = useState(false);
   const [filtroInicio, setFiltroInicio] = useState('');
   const [filtroFin, setFiltroFin] = useState('');
   const [borrandoKpis, setBorrandoKpis] = useState(false);
   
-  // Estados para filtros avanzados y descargas
   const [filtroPreparador, setFiltroPreparador] = useState('');
   const [descargandoExcel, setDescargandoExcel] = useState(false);
   
@@ -48,13 +47,11 @@ export default function PanelAdmin({ token, rol, nombre }) {
     }
   }, [pestanaActiva]);
 
-  // Estados para cotización / hoja de picking
   const [cotizacion, setCotizacion] = useState('');
   const [datosPicking, setDatosPicking] = useState(null);
   const [cargandoCotizacion, setCargandoCotizacion] = useState(false);
   const [errorCotizacion, setErrorCotizacion] = useState('');
 
-  // Cargar datos principales al iniciar
   useEffect(() => { 
     if (pestanaActiva === 'dashboard') cargarKpis(); 
     if (pestanaActiva === 'bodega') verificarEstadoArchivo();
@@ -63,7 +60,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
 
   // --- FUNCIONES DEL BACKEND ---
   const cargarKpis = async () => {
-    // Validamos que si se llena una fecha, se llene la otra
     if ((filtroInicio && !filtroFin) || (!filtroInicio && filtroFin)) {
       alert("Debes seleccionar tanto la fecha 'Desde' como 'Hasta' para filtrar por rango.");
       return;
@@ -75,22 +71,17 @@ export default function PanelAdmin({ token, rol, nombre }) {
 
     try {
       let queryParams = new URLSearchParams();
-      
       if (filtroInicio && filtroFin) {
         queryParams.append('inicio', filtroInicio);
         queryParams.append('fin', filtroFin);
       }
-      
       if (filtroPreparador) queryParams.append('preparador', filtroPreparador);
 
       const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
 
       const res = await fetch(`${API_URL}/api/kpis${queryString}`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) setDatosKpi(await res.json());
-      else {
-        const data = await res.json();
-        console.error('Error al cargar KPIs:', data.detail || data);
-      }
+      else console.error('Error al cargar KPIs');
     } catch (err) {
       console.error(err);
     } finally {
@@ -107,7 +98,6 @@ export default function PanelAdmin({ token, rol, nombre }) {
     setDescargandoExcel(true);
     try {
       let queryParams = new URLSearchParams();
-      
       if (filtroInicio && filtroFin) {
         queryParams.append('inicio', filtroInicio);
         queryParams.append('fin', filtroFin);
@@ -368,14 +358,12 @@ export default function PanelAdmin({ token, rol, nombre }) {
                   onChange={(e) => setFiltroPreparador(e.target.value)}
                 >
                   <option value="">Todos los usuarios</option>
-                  {/* Aquí añadimos a los jefes de bodega al filtro usando || (Ó) */}
                   {listaUsuarios.filter(u => u.rol === 'preparador' || u.rol === 'bodega').map(u => (
                     <option key={u.id} value={u.nombre_completo}>{u.nombre_completo} ({u.rol})</option>
                   ))}
                 </select>
               </div>
               
-              {/* Cambiado a formato Desde-Hasta */}
               <div>
                 <label className="form-label">Desde</label>
                 <input type="date" value={filtroInicio} onChange={(e) => setFiltroInicio(e.target.value)} className="form-input" />
@@ -402,23 +390,42 @@ export default function PanelAdmin({ token, rol, nombre }) {
           </div>
 
           <div className="card-kpi">
-            <h2 className="title-card">Rendimiento por Personal (Tiempos Promedio)</h2>
+            <h2 className="title-card">Rendimiento por Personal</h2>
             {cargandoKpis ? <p>Cargando...</p> : (
               <div className="grid gap-4 md:grid-cols-2">
                 {datosKpi?.estadisticas_preparadores?.map((prep, i) => (
-                  <div key={i} className="card-item">
-                    <div className="flex items-start gap-3">
+                  <div key={i} className="card-item flex-col items-start gap-2">
+                    
+                    {/* Fila 1: Nombre del Preparador */}
+                    <div className="flex items-center gap-3 w-full border-b border-slate-100 pb-2">
                       <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">#{i + 1}</span>
-                      <p className="font-bold flex-1">{prep.nombre}</p>
+                      <p className="font-bold flex-1 text-slate-700">{prep.nombre}</p>
                     </div>
-                    <p className={`text-xl font-black ${prep.tiempo_promedio_minutos < 15 ? 'text-emerald-500' : 'text-work-red'}`}>{prep.tiempo_promedio_minutos} min</p>
+
+                    {/* Fila 2: Totales de Pedidos y Prendas */}
+                    <div className="flex justify-between w-full text-xs text-slate-500 mt-1">
+                      <span>Pedidos: <strong>{prep.total_pedidos}</strong></span>
+                      <span>Prendas: <strong>{prep.total_prendas}</strong></span>
+                    </div>
+
+                    {/* Fila 3: Tiempos Promedio (Por Pedido y Por Prenda) */}
+                    <div className="flex justify-between w-full mt-1">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Por Pedido</span>
+                        <p className={`text-sm font-black ${prep.tiempo_promedio_minutos < 15 ? 'text-emerald-500' : 'text-work-red'}`}>{prep.tiempo_promedio_minutos} min</p>
+                      </div>
+                      <div className="flex flex-col text-right">
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Por Prenda</span>
+                        <p className={`text-sm font-black ${prep.tiempo_promedio_por_prenda < 2 ? 'text-emerald-500' : 'text-work-red'}`}>{prep.tiempo_promedio_por_prenda} min</p>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Tablas de Detalles y Prendas (Apiladas verticalmente con flex-col) */}
+          {/* Tablas de Detalles y Prendas */}
           {cargandoKpis ? <p className="text-center font-bold text-slate-500 py-8">Cargando métricas...</p> : (
             <div className="flex flex-col gap-10">
               
@@ -431,7 +438,11 @@ export default function PanelAdmin({ token, rol, nombre }) {
                         <p className="font-bold">Cot: {item.cotizacion_id}</p>
                         <p className="text-xs text-slate-500">{item.preparador} • {item.fecha}</p>
                       </div>
-                      <p className="font-black text-work-red">{item.duracion_minutos} min</p>
+                      <div className="text-right">
+                         <p className="font-black text-work-red">{item.duracion_minutos} min</p>
+                         {/* Incluimos la visualización de prendas por pedido aquí también si es de utilidad */}
+                         <p className="text-[10px] font-bold text-slate-400">{item.prendas} Prendas</p>
+                      </div>
                     </div>
                   ))}
                   {detallesPaginados.length === 0 && <p className="text-sm text-slate-400">No hay registros.</p>}
