@@ -327,7 +327,6 @@ def obtener_kpis(
     registro_ids = [r.id for r in registros]
     prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
 
-    # 1. Mapear rápidamente cuántas prendas tiene cada registro de picking
     prendas_por_registro = {}
     for p in prendas_db:
         prendas_por_registro[p.registro_id] = prendas_por_registro.get(p.registro_id, 0) + p.cantidad
@@ -335,34 +334,42 @@ def obtener_kpis(
     kpis_preparadores = {}
     detalle_pickings = [] 
     
-    # 2. Asignar los datos y tiempos a cada preparador
     for r in registros:
         tiempo_segundos = (r.hora_fin - r.hora_inicio).total_seconds()
         minutos = tiempo_segundos / 60.0
         nombre = r.nombre_preparador
-        prendas_procesadas = prendas_por_registro.get(r.id, 0) # Obtenemos las prendas de este picking
+        prendas_procesadas = prendas_por_registro.get(r.id, 0)
+        
+        # NUEVO: Calculamos la eficiencia individual de esta cotización
+        minutos_por_prenda = minutos / prendas_procesadas if prendas_procesadas > 0 else 0
         
         detalle_pickings.append({
             "cotizacion_id": r.cotizacion_id,
             "preparador": nombre,
             "fecha": r.hora_fin.strftime("%Y-%m-%d %H:%M"),
             "duracion_minutos": round(minutos, 2),
-            "prendas": prendas_procesadas
+            "prendas": prendas_procesadas,
+            "minutos_por_prenda": round(minutos_por_prenda, 2) # Enviamos el dato al Frontend
         })
 
         if nombre not in kpis_preparadores:
-            # Inicializamos el diccionario del usuario si no existe
-            kpis_preparadores[nombre] = {"total_pedidos": 0, "tiempo_total": 0, "total_prendas": 0}
+            kpis_preparadores[nombre] = {
+                "total_pedidos": 0, 
+                "tiempo_total": 0, 
+                "total_prendas": 0, 
+                "suma_minutos_por_prenda": 0 # Sumador para el nuevo promedio
+            }
             
         kpis_preparadores[nombre]["total_pedidos"] += 1
         kpis_preparadores[nombre]["tiempo_total"] += minutos
         kpis_preparadores[nombre]["total_prendas"] += prendas_procesadas
+        kpis_preparadores[nombre]["suma_minutos_por_prenda"] += minutos_por_prenda
 
-    # 3. Calcular los promedios finales asegurando no dividir por cero
     resultados = []
     for nombre, datos in kpis_preparadores.items():
         promedio_pedido = datos["tiempo_total"] / datos["total_pedidos"] if datos["total_pedidos"] > 0 else 0
-        promedio_prenda = datos["tiempo_total"] / datos["total_prendas"] if datos["total_prendas"] > 0 else 0
+        # NUEVO: Promedio real basado en las tasas individuales de cada pedido
+        promedio_prenda = datos["suma_minutos_por_prenda"] / datos["total_pedidos"] if datos["total_pedidos"] > 0 else 0
         
         resultados.append({
             "nombre": nombre, 
@@ -373,11 +380,9 @@ def obtener_kpis(
         })
     resultados = sorted(resultados, key=lambda x: x["tiempo_promedio_minutos"])
 
-    # 4. Lógica de resumen global (Histórico y por Meses)
     conteo_prendas = {}
     total_prendas_sum = 0
     prendas_por_mes = {} 
-
     fechas_registros = {r.id: r.hora_fin for r in registros}
 
     for p in prendas_db:
@@ -413,9 +418,7 @@ def obtener_kpis(
         "detalle_pickings": detalle_pickings
     }
 
-# ==========================================
-# RUTA PARA EXPORTAR A EXCEL (CON DESGLOSE POR MES)
-# ==========================================
+
 @app.get("/api/kpis/exportar")
 def exportar_kpis_excel(
     db: Session = Depends(get_db),
@@ -448,21 +451,31 @@ def exportar_kpis_excel(
     registro_ids = [r.id for r in registros]
     prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
 
-    # 1. Hoja: Registro de Tiempos
+    # Mapa de prendas por registro para usar en el Excel
+    prendas_por_registro = {}
+    for p in prendas_db:
+        prendas_por_registro[p.registro_id] = prendas_por_registro.get(p.registro_id, 0) + p.cantidad
+
     datos_tiempos = []
     fechas_registros = {} 
+    
     for r in registros:
         minutos = (r.hora_fin - r.hora_inicio).total_seconds() / 60.0
         fechas_registros[r.id] = r.hora_fin
+        prendas_procesadas = prendas_por_registro.get(r.id, 0)
+        minutos_por_prenda = minutos / prendas_procesadas if prendas_procesadas > 0 else 0
+
+        # NUEVO: Estructura del Excel actualizada con los datos exactos por cotización
         datos_tiempos.append({
             "Cotización ID": r.cotizacion_id,
             "Preparador": r.nombre_preparador,
             "Fecha Inicio": r.hora_inicio.strftime("%Y-%m-%d %H:%M:%S"),
             "Fecha Fin": r.hora_fin.strftime("%Y-%m-%d %H:%M:%S"),
-            "Tiempo Invertido (Minutos)": round(minutos, 2)
+            "Prendas Procesadas": prendas_procesadas,
+            "Tiempo Total (Minutos)": round(minutos, 2),
+            "Tiempo por Prenda (Minutos)": round(minutos_por_prenda, 2)
         })
 
-    # 2. Hoja: Resumen de Prendas Procesadas y Cálculo Dinámico de Meses
     conteo_prendas = {}
     total_prendas_historico = 0
     prendas_por_mes = {}
@@ -471,7 +484,6 @@ def exportar_kpis_excel(
         clave = (p.sku, p.descripcion)
         conteo_prendas[clave] = conteo_prendas.get(clave, 0) + p.cantidad
         
-        # Lógica global y por mes
         total_prendas_historico += p.cantidad
         fecha_fin = fechas_registros.get(p.registro_id)
         if fecha_fin:
@@ -480,19 +492,10 @@ def exportar_kpis_excel(
         
     datos_prendas = [{"SKU": k[0], "Descripción": k[1], "Cantidad Total": v} for k, v in conteo_prendas.items()]
 
-    # 3. Hoja: Resumen General con desglose mensual
-    datos_resumen = [
-        {"Métrica": "Total Prendas Histórico", "Valor": total_prendas_historico}
-    ]
-
-    # Agregamos dinámicamente cada mes registrado, ordenando del más nuevo al más viejo
+    datos_resumen = [{"Métrica": "Total Prendas Histórico", "Valor": total_prendas_historico}]
     for mes_registrado in sorted(prendas_por_mes.keys(), reverse=True):
-        datos_resumen.append({
-            "Métrica": f"Prendas procesadas en {mes_registrado}", 
-            "Valor": prendas_por_mes[mes_registrado]
-        })
+        datos_resumen.append({"Métrica": f"Prendas procesadas en {mes_registrado}", "Valor": prendas_por_mes[mes_registrado]})
 
-    # Crear el archivo Excel
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         df_resumen = pd.DataFrame(datos_resumen)
@@ -505,7 +508,6 @@ def exportar_kpis_excel(
         df_prendas.to_excel(writer, index=False, sheet_name='Prendas Procesadas')
         
     buffer.seek(0)
-    
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

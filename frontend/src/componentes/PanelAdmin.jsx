@@ -440,8 +440,10 @@ export default function PanelAdmin({ token, rol, nombre }) {
                       </div>
                       <div className="text-right">
                          <p className="font-black text-work-red">{item.duracion_minutos} min</p>
-                         {/* Incluimos la visualización de prendas por pedido aquí también si es de utilidad */}
-                         <p className="text-[10px] font-bold text-slate-400">{item.prendas} Prendas</p>
+                         {/* NUEVO: Mostramos las prendas y el promedio de minutos por prenda */}
+                         <p className="text-[10px] font-bold text-slate-400">
+                           {item.prendas} Prendas • {item.minutos_por_prenda} min/prenda
+                         </p>
                       </div>
                     </div>
                   ))}
