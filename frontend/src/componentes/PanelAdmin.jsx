@@ -338,9 +338,22 @@ export default function PanelAdmin({ token, rol, nombre }) {
               <h2 className="label-kpi">Total Pedidos Procesados</h2>
               <p className="value-kpi">{datosKpi ? datosKpi.total_pickings_historico : '0'} <span className="text-lg text-slate-400 font-medium">Pedidos</span></p>
             </div>
-            <div className="card-kpi">
-              <h2 className="label-kpi">Total Prendas Procesadas</h2>
-              <p className="value-kpi">{datosKpi ? datosKpi.total_prendas_historico : '0'} <span className="text-lg text-slate-400 font-medium">Unds</span></p>
+            <div className="card-kpi flex flex-col justify-between">
+              <h2 className="label-kpi">Prendas Procesadas</h2>
+              <div className="flex justify-between items-end mt-2">
+                <div>
+                  <p className="text-4xl font-black text-emerald-600">
+                    {datosKpi ? datosKpi.total_prendas_este_mes : '0'}
+                  </p>
+                  <p className="text-sm text-slate-500 font-medium">Este mes</p>
+                </div>
+                <div className="text-right border-l border-slate-200 pl-4">
+                  <p className="text-2xl font-black text-slate-400">
+                    {datosKpi ? datosKpi.total_prendas_anteriores : '0'}
+                  </p>
+                  <p className="text-xs text-slate-400 font-medium">Meses ant.</p>
+                </div>
+              </div>
             </div>
           </div>
 

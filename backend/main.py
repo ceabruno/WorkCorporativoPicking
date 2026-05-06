@@ -362,12 +362,27 @@ def obtener_kpis(
     prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
     
     conteo_prendas = {}
-    total_prendas_sum = 0 # Acumulador del total de prendas
+    total_prendas_sum = 0
+    total_prendas_este_mes = 0 # NUEVA VARIABLE: Guardará lo de este mes
+
+    # Creamos un diccionario rápido para saber la fecha de cada registro
+    fechas_registros = {r.id: r.hora_fin for r in registros}
+    hoy = datetime.utcnow()
 
     for p in prendas_db:
         clave = f"{p.sku} | {p.descripcion}" 
         conteo_prendas[clave] = conteo_prendas.get(clave, 0) + p.cantidad
+        
+        # Sumamos al gran total histórico
         total_prendas_sum += p.cantidad
+
+        # Comparamos la fecha: Si el mes y año coinciden con hoy, es de este mes
+        fecha_fin = fechas_registros.get(p.registro_id)
+        if fecha_fin and fecha_fin.month == hoy.month and fecha_fin.year == hoy.year:
+            total_prendas_este_mes += p.cantidad
+
+    # El resto son los meses anteriores
+    total_prendas_anteriores = total_prendas_sum - total_prendas_este_mes
 
     # Ordenamos todas las prendas de mayor a menor cantidad
     todas_prendas = sorted(
@@ -380,6 +395,8 @@ def obtener_kpis(
     return {
         "total_pickings_historico": len(registros),
         "total_prendas_historico": total_prendas_sum,
+        "total_prendas_este_mes": total_prendas_este_mes,         # NUEVO DATO ENVIADO A REACT
+        "total_prendas_anteriores": total_prendas_anteriores, # NUEVO DATO ENVIADO A REACT
         "estadisticas_preparadores": resultados,
         "top_prendas": top_prendas,
         "todas_prendas": todas_prendas,
