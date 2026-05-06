@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import API_URL from '../config';
-import HojaDePicking from './HojaDePicking'; 
+import HojaDePicking from './HojadePicking'; 
 import { IconSearch } from '../icons/Icons';
 
 export default function PanelPicker({ nombreUsuario }) {
