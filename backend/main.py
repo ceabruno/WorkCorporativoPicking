@@ -366,8 +366,9 @@ def obtener_kpis(
         })
     resultados = sorted(resultados, key=lambda x: x["tiempo_promedio_minutos"])
 
-    # --- NUEVA LÍNEA: LÓGICA DE PRENDAS MÁS VENDIDAS ---
-    prendas_db = db.query(PrendaPicking).all()
+    # --- NUEVA LÍNEA: LÓGICA DE PRENDAS MÁS VENDIDAS (FILTRADAS POR PERÍODO) ---
+    registro_ids = [r.id for r in registros]
+    prendas_db = db.query(PrendaPicking).filter(PrendaPicking.registro_id.in_(registro_ids)).all() if registro_ids else []
     conteo_prendas = {}
     for p in prendas_db:
         # Usamos el SKU y nombre como identificador único
