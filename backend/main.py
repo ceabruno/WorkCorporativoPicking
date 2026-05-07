@@ -630,6 +630,13 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
         
         ruta_final = pd.merge(df_pedidos, df_ubicaciones, on="SKU_MERGE", how="left")
         ruta_final = ruta_final.fillna("SIN UBICACIÓN")
+        
+        # Limpiar columnas duplicadas del merge
+        if "SKU (CODIGO)_y" in ruta_final.columns:
+            ruta_final = ruta_final.drop(columns=["SKU (CODIGO)_y"])
+        if "SKU (CODIGO)_x" in ruta_final.columns:
+            ruta_final = ruta_final.rename(columns={"SKU (CODIGO)_x": "SKU (CODIGO)"})
+        ruta_final = ruta_final.drop(columns=["SKU_MERGE"])
 
         if "UBICACION" not in ruta_final.columns and all(col in ruta_final.columns for col in ['PASILLO', 'HILERA', 'ESTAND']):
             ruta_final['UBICACION'] = ruta_final.apply(
