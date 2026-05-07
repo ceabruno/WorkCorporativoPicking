@@ -637,10 +637,12 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
             ruta_final['UBICACION'] = ruta_final['UBICACIÓN']
 
         if all(col in ruta_final.columns for col in ['PASILLO', 'HILERA', 'ESTAND']):
-            ruta_final['PASILLO'] = ruta_final['PASILLO'].astype(str)
-            ruta_final['HILERA'] = ruta_final['HILERA'].astype(str)
-            ruta_final['ESTAND'] = ruta_final['ESTAND'].astype(str)
-            ruta_ordenada = ruta_final.sort_values(by=['PASILLO', 'HILERA', 'ESTAND'])
+            # Extraer números de las columnas para ordenar alfabética y numéricamente
+            ruta_final['PASILLO_STR'] = ruta_final['PASILLO'].astype(str)
+            ruta_final['PASILLO_NUM'] = pd.to_numeric(ruta_final['PASILLO'].astype(str).str.extract('(\d+)', expand=False), errors='coerce').fillna(0).astype(int)
+            ruta_final['HILERA_NUM'] = pd.to_numeric(ruta_final['HILERA'], errors='coerce').fillna(0).astype(int)
+            ruta_final['ESTAND_NUM'] = pd.to_numeric(ruta_final['ESTAND'], errors='coerce').fillna(0).astype(int)
+            ruta_ordenada = ruta_final.sort_values(by=['PASILLO_STR', 'PASILLO_NUM', 'HILERA_NUM', 'ESTAND_NUM']).drop(columns=['PASILLO_STR', 'PASILLO_NUM', 'HILERA_NUM', 'ESTAND_NUM'])
         else:
             ruta_ordenada = ruta_final
 

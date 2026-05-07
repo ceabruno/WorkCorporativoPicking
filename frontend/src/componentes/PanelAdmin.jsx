@@ -252,7 +252,9 @@ export default function PanelAdmin({ token, rol, nombre }) {
     try {
       const res = await fetch(`${API_URL}/api/config/subir-ubicaciones`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}` 
+        },
         body: formData
       });
 
@@ -264,9 +266,11 @@ export default function PanelAdmin({ token, rol, nombre }) {
         verificarEstadoArchivo();
         document.getElementById('input-archivo-ubicaciones').value = '';
       } else {
-        alert(`Error: ${data.detail}`);
+        console.error('Error del servidor:', data);
+        alert(`Error: ${data.detail || 'Error desconocido al subir el archivo'}`);
       }
     } catch (error) {
+      console.error('Error de red:', error);
       alert(`Error al subir archivo: ${error.message}`);
     } finally {
       setSubiendoArchivo(false);
