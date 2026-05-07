@@ -612,9 +612,11 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
         for item in items_cotizacion:
             producto_info = item.get("product") or {}
             sku_original = str(producto_info.get("sku", "")).strip()
+            sku_limpio = sku_original.lstrip("0") 
             
             productos_solicitados.append({
                 "SKU (CODIGO)": sku_original, 
+                "SKU_MERGE": sku_limpio, 
                 "DESCRIPCION": producto_info.get("description", "Sin descripción"),
                 "CANTIDAD": item.get("quantity", 0),
                 "PRECIO": round(item.get("unitPrice", 0) * 1.19)
@@ -624,8 +626,9 @@ def generar_hoja_picking(cotizacion_id: str, db: Session = Depends(get_db)):
         df_pedidos = pd.DataFrame(productos_solicitados)
         
         df_ubicaciones["SKU (CODIGO)"] = df_ubicaciones["SKU (CODIGO)"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+        df_ubicaciones["SKU_MERGE"] = df_ubicaciones["SKU (CODIGO)"].str.lstrip("0")
         
-        ruta_final = pd.merge(df_pedidos, df_ubicaciones, on="SKU (CODIGO)", how="left")
+        ruta_final = pd.merge(df_pedidos, df_ubicaciones, on="SKU_MERGE", how="left")
         ruta_final = ruta_final.fillna("SIN UBICACIÓN")
 
         if "UBICACION" not in ruta_final.columns and all(col in ruta_final.columns for col in ['PASILLO', 'HILERA', 'ESTAND']):
